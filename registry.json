@@ -1,0 +1,40 @@
+{
+  "capabilities": {
+    "download": {
+      "repo": "zinan92/content-downloader",
+      "description": "统一内容下载 (抖音/小红书/公众号/X)",
+      "stage": 2,
+      "requires": ["python3"],
+      "entry": "python3 -m content_downloader"
+    },
+    "extract": {
+      "repo": "zinan92/content-extractor",
+      "description": "多模态内容提取 (视频转录/图片OCR/文章清洗)",
+      "stage": 3,
+      "requires": ["python3", "whisper"],
+      "entry": "python3 -m content_extractor"
+    },
+    "rewrite": {
+      "repo": "zinan92/content-rewriter",
+      "description": "跨平台内容改写 (抖音→小红书/公众号)",
+      "stage": 5,
+      "requires": ["python3", "claude"],
+      "entry": "python3 -m content_rewriter"
+    },
+    "videocut": {
+      "repo": "zinan92/videocut",
+      "description": "视频编辑能力集 (剪口播/字幕/金句/拆条/封面/变速)",
+      "stage": 6,
+      "requires": ["node", "ffmpeg", "whisper", "claude"],
+      "entry": "node cli.js",
+      "subcommands": ["transcribe", "autocut", "subtitle", "hook", "clip", "cover", "speed", "pipeline"]
+    },
+    "intelligence": {
+      "repo": "zinan92/content-intelligence",
+      "description": "内容洞察引擎 (趋势检测/爆款归因/选题建议)",
+      "stage": 1,
+      "requires": ["python3"],
+      "entry": "python3 -m content_intelligence"
+    }
+  }
+}
