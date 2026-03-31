@@ -2,29 +2,67 @@
 
 # content-toolkit
 
-**AI 内容流水线。一个 CLI，全部能力按需加载。从 URL 到多平台发布，一条命令。**
+**AI 内容生产工具箱。一个 CLI，五大能力按需安装。URL/视频/文章进去，下载/转录/改写/剪辑出来。**
 
 [![Node.js](https://img.shields.io/badge/node-18+-339933.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Capabilities](https://img.shields.io/badge/capabilities-5-blue.svg)](#能力一览)
+[![Capabilities](https://img.shields.io/badge/capabilities-5-blue.svg)](#功能一览)
 
 </div>
 
 ---
 
 ```
-in  URL / 视频文件 / 文本文件
-out 剪辑视频 + 字幕 + 金句片段 + 封面卡片 + 多平台文案
+in  URL | 视频文件 | 文本文件 | 内容目录
+out 下载素材 + 转录文本 + 平台文案 + 剪辑视频 + 字幕 + 金句片段 + 封面卡片
 
-fail 能力未安装  → 自动 clone 对应 repo，首次约 10s
-fail 依赖缺失    → 报告缺少的工具 (ffmpeg/whisper/claude) + 安装指引
-fail 能力执行失败 → 透传上游错误信息，中间文件保留用于调试
+fail 能力未安装     → 自动 git clone 对应 repo + 创建 venv + 安装依赖，首次约 10-30s
+fail 系统依赖缺失   → 报告缺少的工具 (ffmpeg/whisper/claude) + 安装指引
+fail 能力执行失败   → 透传上游错误信息，中间文件保留用于调试
+fail 直接传 URL     → 智能提示 "看起来你想下载内容？试试 content download <URL>"
+fail 直接传 .mp4    → 智能提示对应的 videocut 子命令
 ```
 
 ## 示例输出
 
+```
+$ content
+
+content-toolkit — AI 内容生产工具箱
+
+我想要...                                          命令
+─────────────────────────────────────────────────────────────────
+下载视频/文章/图文    content download <URL>
+  抖音视频             content download https://douyin.com/video/xxx
+  抖音博主全部视频     content download https://douyin.com/user/xxx
+  小红书笔记           content download https://xiaohongshu.com/explore/xxx
+  微信公众号文章       content download https://mp.weixin.qq.com/s/xxx
+  X/Twitter 推文       content download https://x.com/user/status/xxx
+
+提取文字/转录         content extract <内容目录>
+  从下载目录提取        content extract ./output/douyin/user/video123/
+
+改写成其他平台        content rewrite <内容目录> --from <来源> --to <目标>
+  抖音→小红书           content rewrite ./output/video123/ --from douyin --to xiaohongshu
+
+编辑视频              content videocut <子命令> <视频文件>
+  转录视频为文字        content videocut transcribe input.mp4
+  去口癖/废话           content videocut autocut input.mp4 -o output/
+  加字幕                content videocut subtitle input.mp4 --lang zh
+  截精彩片段            content videocut hook input.mp4 -o output/
+  拆成多个短视频        content videocut clip input.mp4 -o output/
+  生成封面/金句卡        content videocut cover input.mp4 --text "你的金句"
+  一条龙处理            content videocut pipeline input.mp4 --steps autocut,subtitle -o output/
+
+管理:
+  content list              查看所有能力及安装状态
+  content install <name>    预装一个能力
+  content update <name>     更新已安装的能力
+  content remove <name>     删除已安装的能力
+```
+
 ```bash
-$ node cli.js videocut autocut ~/录制.mp4 -o /tmp/demo/ --no-review
+$ content videocut autocut ~/录制.mp4 -o /tmp/demo/ --no-review
 
   Installing videocut from zinan92/videocut...
   Installed: videocut
@@ -39,33 +77,30 @@ $ node cli.js videocut autocut ~/录制.mp4 -o /tmp/demo/ --no-review
   AI marked 8 additional segments
 ═══ AutoCut: Cutting ═══
   ✅ AutoCut complete: /tmp/demo/cut.mp4
-
-$ ls /tmp/demo/
-audio.mp3           cut.mp4             cut_feedback.json
-transcript.json     transcript.srt      transcript.txt
-readable.txt        sentences.txt       delete_segments.json
 ```
 
 ## 架构
 
 ```
-                        content-toolkit (本 repo)
-                              │
-                         node cli.js
+                          content  (统一 CLI 入口)
                               │
               ┌───────────────┼───────────────┐
               │               │               │
          registry.json   install.js      capabilities/
-         (能力注册表)     (按需下载)       (初始为空)
-                                              │
-                    首次使用时自动 git clone ──┤
-                                              │
-              ┌───────┬───────┬───────┬───────┤
+         (能力注册表)     (按需安装器)      (初始为空)
+                              │
+                    首次使用时自动执行:
+                    1. git clone --depth 1
+                    2. 检测 pyproject.toml / requirements.txt
+                    3. 创建 .venv + pip install -e .
+                    4. 解析 entry → venv/bin CLI 命令
+                              │
+              ┌───────┬───────┼───────┬───────┐
               ▼       ▼       ▼       ▼       ▼
           download  extract rewrite videocut intelligence
-          (stage 2) (stage 3)(stage 5)(stage 6)(stage 1)
-              │       │       │       │
-              ▼       ▼       ▼       ▼
+          Python    Python  Python  Node.js  Python
+              │       │       │       │       │
+              ▼       ▼       ▼       ▼       ▼
           各自独立的 GitHub repo，独立开发和版本控制
 ```
 
@@ -76,39 +111,24 @@ readable.txt        sentences.txt       delete_segments.json
 git clone https://github.com/zinan92/content-toolkit.git
 cd content-toolkit
 
-# 2. 直接用（首次自动安装对应能力）
+# 2. 直接用（首次自动安装对应能力 + Python 依赖）
+node cli.js download https://douyin.com/video/xxx
+node cli.js extract ./output/douyin/user/video123/
 node cli.js videocut autocut ~/你的视频.mp4 -o output/ --no-review
 
 # 3. 查看所有能力
 node cli.js list
 ```
 
-## 流水线全景
+## 功能一览
 
-```
-┌────┬────────────────┬──────────────────────────────────────────┐
-│ #  │     问题       │               Capability                 │
-├────┼────────────────┼──────────────────────────────────────────┤
-│ 01 │ 什么内容火？   │ intelligence (趋势检测/选题建议)          │
-│ 02 │ 拿到原始内容   │ download (抖音/小红书/公众号/X)           │
-│ 03 │ 它说了什么？   │ extract (转录/OCR/清洗)                   │
-│ 04 │ 100 选 3       │ curator (coming soon)                     │
-│ 05 │ 变成我的内容   │ rewrite (跨平台改写)                      │
-│ 06 │ 做成成品       │ videocut (7 个视频编辑能力)               │
-│ 07 │ 发出去         │ publisher (coming soon)                   │
-│ 08 │ 什么 work 了？ │ tracker (coming soon)                     │
-└────┴────────────────┴──────────────────────────────────────────┘
-```
-
-## 能力一览
-
-| 能力 | 命令 | 输入 | 输出 | 依赖 |
-|------|------|------|------|------|
-| intelligence | `content intelligence` | — | 趋势报告 + 选题建议 | Python 3 |
-| download | `content download <url>` | URL | 视频/图片/文章 + 元数据 | Python 3 |
-| extract | `content extract <dir>` | 文件目录 | 转录文本 + OCR + 清洗文章 | Python 3, Whisper |
-| rewrite | `content rewrite <file>` | 文本文件 | 平台文案 (小红书/公众号/X) | Python 3, Claude CLI |
-| videocut | `content videocut <sub>` | 视频文件 | 见下表 | Node, FFmpeg, Whisper, Claude CLI |
+| # | 能力 | 命令 | 说明 | 状态 |
+|---|------|------|------|------|
+| 1 | intelligence | `content intelligence` | 趋势检测 / 爆款归因 / 选题建议 | 计划中 |
+| 2 | download | `content download <URL>` | 统一下载 (抖音/小红书/公众号/X) | 已完成 |
+| 3 | extract | `content extract <目录\|视频文件>` | 多模态提取 (转录/OCR/清洗)，支持裸视频文件 | 已完成 |
+| 4 | rewrite | `content rewrite <目录\|文本文件>` | 跨平台改写，支持裸 .md/.txt + 默认参数 | 已完成 |
+| 5 | videocut | `content videocut <子命令>` | 视频编辑 (7 个子能力)，支持批量目录输入 | 已完成 |
 
 ### Videocut 子能力
 
@@ -128,64 +148,55 @@ node cli.js list
 ### 口播视频一条龙
 
 ```bash
-node cli.js videocut pipeline ~/录制.mp4 --steps autocut,speed,subtitle,hook,cover -o output/
+content videocut pipeline ~/录制.mp4 --steps autocut,speed,subtitle,hook,cover -o output/
 ```
 
 ### 下载别人的内容 → 改写发布
 
 ```bash
-node cli.js download https://douyin.com/video/xxx -o raw/
-node cli.js extract raw/
-node cli.js rewrite raw/transcript.md --platform xhs
+content download https://douyin.com/video/xxx -o raw/
+content extract raw/
+content rewrite raw/transcript.md --platform xhs
 ```
 
 ### 长视频拆条
 
 ```bash
-node cli.js videocut clip ~/长视频.mp4 -o clips/
-```
-
-## 管理命令
-
-```bash
-node cli.js list              # 查看所有能力 + 安装状态
-node cli.js list --installed  # 只看已安装的
-node cli.js install <name>    # 预装某个能力
-node cli.js update <name>     # 更新已安装的能力
-node cli.js remove <name>     # 删除已安装的能力
-```
-
-## 项目结构
-
-```
-content-toolkit/
-├── cli.js            # 统一入口
-├── install.js        # 懒加载安装器 (首次使用时 clone)
-├── registry.json     # 能力注册表 (repo URL + 依赖)
-├── capabilities/     # 初始为空，按需填充
-│   ├── download/     # → zinan92/content-downloader
-│   ├── extract/      # → zinan92/content-extractor
-│   ├── rewrite/      # → zinan92/content-rewriter
-│   ├── videocut/     # → zinan92/videocut
-│   └── intelligence/ # → zinan92/content-intelligence
-├── SKILL.md          # Agent 入口 (路由 + 决策树)
-└── README.md
+content videocut clip ~/长视频.mp4 -o clips/
 ```
 
 ## 技术栈
 
 | 层级 | 技术 | 用途 |
 |------|------|------|
-| CLI | Node.js 18+ (built-ins only) | 路由 + 懒加载安装 |
-| 注册表 | registry.json | 能力发现 + 依赖检查 |
+| CLI | Node.js 18+ (built-ins only) | 路由 + 懒加载安装 + venv 解析 |
+| 注册表 | registry.json | 能力发现 + entry point 定义 + 依赖检查 |
+| 安装器 | install.js | git clone + pyproject.toml/requirements.txt 检测 + venv 创建 |
 | 能力 | 独立 Git repos | 各自独立开发和部署 |
-| 依赖管理 | git clone --depth 1 | 浅克隆，按需下载 |
+| Python 能力 | venv + pip install -e . | 隔离依赖，CLI 命令装在 venv/bin |
 
 零 npm 依赖。整个 toolkit 只用 Node.js 内置模块。
 
+## 项目结构
+
+```
+content-toolkit/
+├── cli.js            # 统一入口 (路由 + venv/bin 解析 + 中文帮助)
+├── install.js        # 懒加载安装器 (clone + venv + pip install)
+├── registry.json     # 能力注册表 (repo URL + entry point + 依赖)
+├── capabilities/     # 初始为空，按需填充
+│   ├── download/     # → zinan92/content-downloader
+│   ├── extract/      # → zinan92/content-extractor
+│   ├── rewrite/      # → zinan92/content-rewriter
+│   ├── videocut/     # → zinan92/videocut
+│   └── intelligence/ # → zinan92/content-intelligence
+├── SKILL.md          # Agent 入口 (意图匹配 + 决策树)
+└── README.md
+```
+
 ## For AI Agents
 
-**读 `SKILL.md` 获取完整路由逻辑。** SKILL.md 包含意图匹配表和决策树，告诉 agent 用户说什么话该用什么能力。
+读 `SKILL.md` 获取完整路由逻辑。SKILL.md 包含意图匹配表和决策树，告诉 agent 用户说什么话该用什么能力。
 
 ### Capability Contract
 
@@ -194,29 +205,44 @@ name: content-toolkit
 version: 1.0.0
 capability:
   summary: Unified CLI for AI content pipeline — lazy-install capabilities on first use
-  in: URL | video file | text file
-  out: edited video + subtitles + hooks + cards + platform copy
+  in: URL | video file | text file | content directory
+  out: downloaded media + transcripts + platform copy + edited video + subtitles + hooks + cards
   fail:
-    - "capability not installed → auto clone from GitHub"
-    - "missing dependency → report + install instructions"
+    - "capability not installed → auto clone + venv + pip install"
+    - "missing system dependency → report + install instructions"
     - "capability execution error → passthrough upstream error"
+    - "bare URL input → suggest content download <URL>"
+    - "bare .mp4 input → suggest videocut subcommand"
 cli_command: node cli.js
 cli_args:
   - name: capability
     type: string
     required: true
     description: "能力名称 (download/extract/rewrite/videocut/intelligence)"
+  - name: subcommand
+    type: string
+    required: false
+    description: "子命令 (videocut 专用: transcribe/autocut/subtitle/hook/clip/cover/speed/pipeline)"
   - name: input
     type: string
     required: false
-    description: "输入文件或 URL"
+    description: "输入文件、目录或 URL"
 cli_flags:
   - name: -o
     type: string
     description: "输出目录"
+  - name: --from
+    type: string
+    description: "来源平台 (rewrite 用)"
+  - name: --to
+    type: string
+    description: "目标平台 (rewrite 用，逗号分隔多个)"
   - name: --steps
     type: string
     description: "pipeline 模式下的步骤列表 (逗号分隔)"
+  - name: --no-review
+    type: boolean
+    description: "跳过人工确认 (autocut 用)"
 ```
 
 ### Agent 调用示例
@@ -231,17 +257,25 @@ result = subprocess.run(
     capture_output=True, text=True, cwd="/path/to/content-toolkit"
 )
 print(result.stdout)
+
+# 下载 + 提取 + 改写
+for cmd in [
+    ["node", "cli.js", "download", "https://douyin.com/video/xxx", "-o", "raw/"],
+    ["node", "cli.js", "extract", "raw/"],
+    ["node", "cli.js", "rewrite", "raw/", "--from", "douyin", "--to", "xiaohongshu"],
+]:
+    subprocess.run(cmd, cwd="/path/to/content-toolkit", check=True)
 ```
 
 ## 相关项目
 
 | 项目 | 说明 | 链接 |
 |------|------|------|
-| videocut | 视频编辑能力集 (7 个独立能力) | [zinan92/videocut](https://github.com/zinan92/videocut) |
+| content-intelligence | 内容洞察引擎 (趋势检测/选题建议) | [zinan92/content-intelligence](https://github.com/zinan92/content-intelligence) |
 | content-downloader | 统一内容下载器 | [zinan92/content-downloader](https://github.com/zinan92/content-downloader) |
 | content-extractor | 多模态内容提取 | [zinan92/content-extractor](https://github.com/zinan92/content-extractor) |
 | content-rewriter | 跨平台内容改写 | [zinan92/content-rewriter](https://github.com/zinan92/content-rewriter) |
-| content-intelligence | 内容洞察引擎 | [zinan92/content-intelligence](https://github.com/zinan92/content-intelligence) |
+| videocut | 视频编辑能力集 (7 个独立能力) | [zinan92/videocut](https://github.com/zinan92/videocut) |
 
 ## License
 
