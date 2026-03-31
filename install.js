@@ -71,14 +71,23 @@ function install(name) {
 
   // Python projects: create venv + install deps
   const requirements = path.join(dest, 'requirements.txt');
-  if (fs.existsSync(requirements)) {
+  const pyproject = path.join(dest, 'pyproject.toml');
+  if (fs.existsSync(requirements) || fs.existsSync(pyproject)) {
     console.log(`  Installing Python dependencies...`);
     const venvPath = path.join(dest, '.venv');
     execFileSync('python3', ['-m', 'venv', venvPath], { cwd: dest });
-    execFileSync(path.join(venvPath, 'bin', 'pip'), ['install', '-r', 'requirements.txt'], {
-      cwd: dest,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    const pip = path.join(venvPath, 'bin', 'pip');
+    if (fs.existsSync(requirements)) {
+      execFileSync(pip, ['install', '-r', 'requirements.txt'], {
+        cwd: dest,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    } else {
+      execFileSync(pip, ['install', '-e', '.'], {
+        cwd: dest,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    }
   }
 
   console.log(`  Installed: ${name}`);

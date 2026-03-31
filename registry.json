@@ -5,21 +5,21 @@
       "description": "统一内容下载 (抖音/小红书/公众号/X)",
       "stage": 2,
       "requires": ["python3"],
-      "entry": "python3 -m content_downloader"
+      "entry": "content-downloader download"
     },
     "extract": {
       "repo": "zinan92/content-extractor",
       "description": "多模态内容提取 (视频转录/图片OCR/文章清洗)",
       "stage": 3,
       "requires": ["python3", "whisper"],
-      "entry": "python3 -m content_extractor"
+      "entry": "content-extractor extract"
     },
     "rewrite": {
       "repo": "zinan92/content-rewriter",
       "description": "跨平台内容改写 (抖音→小红书/公众号)",
       "stage": 5,
       "requires": ["python3", "claude"],
-      "entry": "python3 -m content_rewriter"
+      "entry": "content-rewriter rewrite"
     },
     "videocut": {
       "repo": "zinan92/videocut",

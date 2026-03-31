@@ -11,34 +11,64 @@ function showHelp() {
   const sorted = Object.entries(registry).sort((a, b) => a[1].stage - b[1].stage);
 
   console.log(`
-content-toolkit — AI content pipeline capabilities
+content-toolkit — AI 内容生产工具箱
 
-Usage: content <capability> [args...]
+我想要...                                          命令
+─────────────────────────────────────────────────────────────────
+下载视频/文章/图文    content download <URL>
+  抖音视频             content download https://douyin.com/video/xxx
+  抖音博主全部视频     content download https://douyin.com/user/xxx
+  小红书笔记           content download https://xiaohongshu.com/explore/xxx
+  微信公众号文章       content download https://mp.weixin.qq.com/s/xxx
+  X/Twitter 推文       content download https://x.com/user/status/xxx
 
-Pipeline stages:
+  ⚠️  抖音需要 cookies: content download <URL> --cookies cookies.json
+      首次获取 cookies: content download fetch-cookies
+
+提取文字/转录         content extract <内容目录>
+  从下载目录提取        content extract ./output/douyin/user/video123/
+
+  ⚠️  extract 接受 content-downloader 输出的目录，不接受单个视频文件
+      如果你只有一个视频文件想转文字，用:
+      content videocut transcribe my-video.mp4
+
+改写成其他平台        content rewrite <内容目录> --from <来源> --to <目标>
+  抖音→小红书           content rewrite ./output/video123/ --from douyin --to xiaohongshu
+  抖音→公众号           content rewrite ./output/video123/ --from douyin --to wechat
+  抖音→两个平台         content rewrite ./output/video123/ --from douyin --to xiaohongshu,wechat
+
+  ⚠️  rewrite 需要先跑过 extract，输入目录里要有 extractor_output.json
+  ⚠️  必须指定 --from 和 --to 参数
+
+编辑视频              content videocut <子命令> <视频文件>
+  转录视频为文字        content videocut transcribe input.mp4
+  去口癖/废话           content videocut autocut input.mp4 -o output/
+  加字幕                content videocut subtitle input.mp4 --lang zh
+  截精彩片段            content videocut hook input.mp4 -o output/
+  拆成多个短视频        content videocut clip input.mp4 -o output/
+  生成封面/金句卡        content videocut cover input.mp4 --text "你的金句"
+  加速(1.0-1.2x)       content videocut speed input.mp4 --rate 1.2 -o output/
+  一条龙处理            content videocut pipeline input.mp4 --steps autocut,subtitle -o output/
+
+─────────────────────────────────────────────────────────────────
+典型工作流:
+  1. 下载  content download https://douyin.com/video/xxx --cookies cookies.json
+  2. 提取  content extract ./output/douyin/user/video123/
+  3. 改写  content rewrite ./output/douyin/user/video123/ --from douyin --to xiaohongshu
+
+管理:
+  content list              查看所有能力及安装状态
+  content install <name>    预装一个能力（否则首次使用时自动安装）
+  content update <name>     更新已安装的能力
+  content remove <name>     删除已安装的能力
 `);
 
+  console.log('已安装的能力:');
   for (const [name, cap] of sorted) {
-    const installed = isInstalled(name) ? '[installed]' : '';
-    const subs = cap.subcommands ? ` (${cap.subcommands.join(', ')})` : '';
-    console.log(`  ${String(cap.stage).padStart(2)}. ${name.padEnd(14)} ${cap.description}${subs} ${installed}`);
+    const installed = isInstalled(name);
+    const status = installed ? '✓' : '·';
+    console.log(`  ${status} ${name.padEnd(14)} ${cap.description}`);
   }
-
-  console.log(`
-Management:
-  content list              Show all capabilities and install status
-  content list --installed  Show only installed capabilities
-  content install <name>    Pre-install a capability
-  content update <name>     Update an installed capability
-  content remove <name>     Remove an installed capability
-
-Examples:
-  content download https://douyin.com/video/xxx
-  content extract ./downloaded/
-  content rewrite ./extracted/transcript.md
-  content videocut autocut ./video.mp4 -o output/
-  content videocut pipeline ./video.mp4 --steps autocut,subtitle
-`);
 }
 
 function showList(onlyInstalled) {
@@ -57,7 +87,14 @@ function runCapability(name, args) {
   const registry = loadRegistry();
   const cap = registry[name];
   if (!cap) {
-    console.error(`Unknown capability: "${name}". Run "content" for help.`);
+    // Check if user passed a URL directly (common mistake)
+    if (name.startsWith('http://') || name.startsWith('https://')) {
+      console.error(`看起来你想下载内容？试试:\n  content download ${name}\n`);
+    } else if (name.endsWith('.mp4') || name.endsWith('.mov') || name.endsWith('.mp3')) {
+      console.error(`看起来你想处理一个视频/音频文件？试试:\n  content videocut transcribe ${name}   # 转文字\n  content videocut autocut ${name}     # 去废话\n  content videocut subtitle ${name}    # 加字幕\n`);
+    } else {
+      console.error(`未知命令: "${name}"\n运行 content 查看所有可用命令。`);
+    }
     process.exit(1);
   }
 
@@ -68,14 +105,23 @@ function runCapability(name, args) {
   const [cmd, ...baseArgs] = cap.entry.split(' ');
   const fullArgs = [...baseArgs, ...args];
 
-  // For Python projects with venv, use the venv python
+  // Resolve the executable
   let executable = cmd;
   if (cmd === 'python3') {
+    // python3 -m module: use venv python if available
     const venvPython = path.join(capDir, '.venv', 'bin', 'python3');
     if (fs.existsSync(venvPython)) {
       executable = venvPython;
     }
-  } else if (cmd === 'node') {
+  } else if (cmd !== 'node') {
+    // Check if it's a CLI command installed in venv/bin
+    const venvBin = path.join(capDir, '.venv', 'bin', cmd);
+    if (fs.existsSync(venvBin)) {
+      executable = venvBin;
+    }
+  }
+
+  if (cmd === 'node') {
     // Node projects: resolve entry relative to capability dir
     const resolvedArgs = fullArgs.map((a, i) => {
       if (i === 0 && !a.startsWith('/') && !a.startsWith('-')) {
