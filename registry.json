@@ -35,6 +35,13 @@
       "stage": 1,
       "requires": ["python3"],
       "entry": "python3 -m content_intelligence"
+    },
+    "publish": {
+      "repo": "dreammis/social-auto-upload",
+      "description": "多平台内容发布 (抖音/小红书/B站/快手/视频号/TikTok)",
+      "stage": 7,
+      "requires": ["python3", "patchright"],
+      "entry": "sau"
     }
   }
 }
