@@ -103,7 +103,28 @@ function runCapability(name, args) {
 
   // Build the command
   const [cmd, ...baseArgs] = cap.entry.split(' ');
-  const fullArgs = [...baseArgs, ...args];
+
+  // Resolve relative paths in user args to absolute before changing cwd to capDir.
+  // This covers -o/--output-dir values, --cookies paths, and positional input paths.
+  const userCwd = process.cwd();
+  const PATH_FLAGS = new Set(['-o', '--output-dir', '--cookies', '--style-dir', '--feedback-dir', '--output']);
+  const resolvedUserArgs = args.map((arg, i) => {
+    const prev = args[i - 1];
+    // Value after a path flag
+    if (prev && PATH_FLAGS.has(prev) && arg && !path.isAbsolute(arg)) {
+      return path.resolve(userCwd, arg);
+    }
+    // Positional arg that looks like a path (contains / or . but not a flag)
+    if (!arg.startsWith('-') && (arg.includes('/') || arg.includes('.')) && !arg.startsWith('http')) {
+      const resolved = path.resolve(userCwd, arg);
+      if (fs.existsSync(resolved)) {
+        return resolved;
+      }
+    }
+    return arg;
+  });
+
+  const fullArgs = [...baseArgs, ...resolvedUserArgs];
 
   // Resolve the executable
   let executable = cmd;
@@ -122,15 +143,15 @@ function runCapability(name, args) {
   }
 
   if (cmd === 'node') {
-    // Node projects: resolve entry relative to capability dir
-    const resolvedArgs = fullArgs.map((a, i) => {
+    // Node projects: resolve entry script relative to capability dir
+    const nodeArgs = fullArgs.map((a, i) => {
       if (i === 0 && !a.startsWith('/') && !a.startsWith('-')) {
         return path.join(capDir, a);
       }
       return a;
     });
     try {
-      execFileSync(executable, resolvedArgs, { cwd: capDir, stdio: 'inherit' });
+      execFileSync(executable, nodeArgs, { cwd: capDir, stdio: 'inherit' });
     } catch (err) {
       process.exit(err.status || 1);
     }
