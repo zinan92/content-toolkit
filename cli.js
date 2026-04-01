@@ -37,8 +37,8 @@ content-toolkit — AI 内容生产工具箱
   抖音→公众号           content rewrite ./output/video123/ --from douyin --to wechat
   抖音→两个平台         content rewrite ./output/video123/ --from douyin --to xiaohongshu,wechat
 
-  ⚠️  rewrite 需要先跑过 extract，输入目录里要有 extractor_output.json
-  ⚠️  必须指定 --from 和 --to 参数
+  ⚠️  rewrite 需要先跑过 extract（自动生成 extractor_output.json）
+  ⚠️  也支持直接传 .md/.txt 文件
 
 编辑视频              content videocut <子命令> <视频文件>
   转录视频为文字        content videocut transcribe input.mp4
@@ -110,9 +110,18 @@ function runCapability(name, args) {
   const PATH_FLAGS = new Set(['-o', '--output-dir', '--cookies', '--style-dir', '--feedback-dir', '--output']);
   const resolvedUserArgs = args.map((arg, i) => {
     const prev = args[i - 1];
-    // Value after a path flag
+    // Value after a path flag (space-separated: -o foo)
     if (prev && PATH_FLAGS.has(prev) && arg && !path.isAbsolute(arg)) {
       return path.resolve(userCwd, arg);
+    }
+    // Equals-style path flag (--output-dir=foo)
+    for (const flag of PATH_FLAGS) {
+      if (arg.startsWith(flag + '=')) {
+        const val = arg.slice(flag.length + 1);
+        if (val && !path.isAbsolute(val)) {
+          return flag + '=' + path.resolve(userCwd, val);
+        }
+      }
     }
     // Positional arg that looks like a path (contains / or . but not a flag)
     if (!arg.startsWith('-') && (arg.includes('/') || arg.includes('.')) && !arg.startsWith('http')) {
