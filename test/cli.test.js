@@ -71,6 +71,7 @@ test('getCapabilityUsageHint returns videocut preset help when preset name is mi
   const hint = getCapabilityUsageHint('videocut', ['preset']);
   assert.match(hint, /content videocut preset <预设>/);
   assert.match(hint, /short-form/);
+  assert.match(hint, /subtitle-hook/);
 });
 
 test('getCapabilityUsageHint returns null when capability args are sufficient to continue', () => {

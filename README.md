@@ -256,6 +256,19 @@ content videocut clip ~/长视频.mp4 -o clips/
 content videocut preset short-form ~/录制.mp4 -o output/
 ```
 
+适合快速做一条可发布短视频。默认会串起：
+- `autocut`
+- `speed`
+- `subtitle`
+- `hook`
+- `cover`
+
+如果你想做多条拆条成品，更适合：
+
+```bash
+content videocut preset repurpose-clips ~/长视频.mp4 -o output/
+```
+
 ## 技术栈
 
 | 层级 | 技术 | 用途 |

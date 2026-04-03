@@ -65,6 +65,11 @@ autocut -> speed -> subtitle -> hook -> clip -> cover
 - 只发小红书 → `/ctk-xiaohongshu`
 - 需要先看内容强弱 → `/ctk-analyze`
 
+Preset 的默认下一步：
+- `short-form` → `/ctk-publish` 或 `/ctk-xiaohongshu`
+- `subtitle-hook` → 先复查 hook，再进入发布
+- `repurpose-clips` → `/ctk-rewrite` 做多条文案，或 `/ctk-publish` 做批量分发
+
 ## 下一步建议
 
 | 触发条件 | 推荐话术 |
