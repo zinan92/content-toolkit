@@ -6,6 +6,7 @@ const {
   validateCapabilityArgs,
   normalizeCapabilityName,
   getCapabilityUsageHint,
+  normalizeCapabilityArgs,
 } = require('../cli.js');
 
 test('normalizeCapabilityName maps xhs alias to xiaohongshu', () => {
@@ -88,6 +89,20 @@ test('buildCommandPlan routes analyze transcribe to videocut transcribe', () => 
   });
 });
 
+test('normalizeCapabilityArgs normalizes publish platform aliases', () => {
+  assert.deepEqual(
+    normalizeCapabilityArgs('publish', ['xhs', 'upload-video', '--account', 'creator']),
+    ['xiaohongshu', 'upload-video', '--account', 'creator']
+  );
+});
+
+test('normalizeCapabilityArgs normalizes rewrite platform aliases', () => {
+  assert.deepEqual(
+    normalizeCapabilityArgs('rewrite', [__filename, '--from', 'xhs', '--to', 'wx,twitter']),
+    [__filename, '--from', 'xiaohongshu', '--to', 'wechat,x']
+  );
+});
+
 test('validateCapabilityArgs catches missing publish account', () => {
   const msg = validateCapabilityArgs('publish', ['xiaohongshu', 'upload-video', '--file', 'demo.mp4', '--title', '标题', '--desc', '描述']);
   assert.match(msg, /缺少 --account/);
@@ -142,6 +157,21 @@ test('validateCapabilityArgs accepts fetch-cookies as a valid download action', 
   assert.equal(msg, null);
 });
 
+test('validateCapabilityArgs accepts analyze trends without an input path', () => {
+  const msg = validateCapabilityArgs('analyze', ['trends']);
+  assert.equal(msg, null);
+});
+
+test('validateCapabilityArgs catches missing analyze directory for hooks mode', () => {
+  const msg = validateCapabilityArgs('analyze', ['hooks']);
+  assert.match(msg, /缺少内容目录/);
+});
+
+test('validateCapabilityArgs catches unsupported analyze mode', () => {
+  const msg = validateCapabilityArgs('analyze', ['mystery-mode']);
+  assert.match(msg, /不支持的 analyze 模式/);
+});
+
 test('validateCapabilityArgs catches missing download URL', () => {
   const msg = validateCapabilityArgs('download', []);
   assert.match(msg, /content download <URL>/);
@@ -190,4 +220,14 @@ test('validateCapabilityArgs catches missing videocut pipeline steps', () => {
 test('validateCapabilityArgs accepts a valid rewrite command shape', () => {
   const msg = validateCapabilityArgs('rewrite', [__filename, '--from', 'douyin', '--to', 'xiaohongshu'], process.cwd());
   assert.equal(msg, null);
+});
+
+test('validateCapabilityArgs catches unsupported rewrite target platform', () => {
+  const msg = validateCapabilityArgs('rewrite', [__filename, '--from', 'douyin', '--to', 'marsbook'], process.cwd());
+  assert.match(msg, /不支持的目标平台/);
+});
+
+test('validateCapabilityArgs catches unsupported videocut subcommand', () => {
+  const msg = validateCapabilityArgs('videocut', ['magic-cut', __filename], process.cwd());
+  assert.match(msg, /不支持的 videocut 子命令/);
 });

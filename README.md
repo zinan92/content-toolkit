@@ -62,6 +62,8 @@ content-toolkit — AI 内容生产工具箱
   从目录提取文字        content analyze extract ./output/douyin/user/video123/
   单视频转录            content analyze transcribe input.mp4
   看趋势/选题           content analyze trends
+  看 hooks/结构         content analyze hooks ./output/douyin/user/video123/
+  看竞品/发布准备度      content analyze competitors ./output/douyin/user/video123/
 
 改写成其他平台        content rewrite <内容目录> --from <来源> --to <目标>
   抖音→小红书           content rewrite ./output/video123/ --from douyin --to xiaohongshu
@@ -189,6 +191,12 @@ node cli.js list
 - `SKILL.md`：角色、哲学、Phase 工作流、路由规则
 - `references/`：命令契约、矩阵、检查清单、故障排查
 - `scripts/`：稳定命令模板和参数预处理
+
+常用别名也会在 CLI 执行前被规范化：
+- `content intelligence` -> `content analyze`
+- `xhs` -> `xiaohongshu`
+- `wx` / `weixin` -> `wechat`
+- `twitter` -> `x`
 
 ### Videocut 子能力
 

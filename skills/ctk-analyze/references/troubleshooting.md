@@ -9,6 +9,7 @@
   - `content analyze extract <目录>`
   - `content analyze transcribe input.mp4`
   - `content analyze trends`
+  - `content analyze hooks <目录>`
 
 ### 2. Directory extraction was requested without a directory
 
@@ -23,7 +24,20 @@
 ### 4. User wants judgment, not extraction
 
 - Symptom: they ask "what topic should I do" or "why did this hook work"
-- Response: route to `content analyze trends`
+- Response:
+  - no input yet -> `content analyze trends`
+  - already has a content directory -> `content analyze hooks <目录>` or `content analyze readiness <目录>`
+
+### 5. Unsupported analysis mode
+
+- Response: explain the supported modes directly
+- Current supported modes:
+  - `extract`
+  - `transcribe`
+  - `trends`
+  - `hooks`
+  - `competitors`
+  - `readiness`
 
 ## Recovery rule
 

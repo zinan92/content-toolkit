@@ -38,13 +38,25 @@ Use when the user asks:
 content analyze trends
 ```
 
+## 4. Inspect hooks, competitors, or publish readiness from a content directory
+
+Use when the user already has a downloaded or extracted directory and wants judgment instead of raw extraction:
+
+```bash
+content analyze hooks <目录>
+content analyze competitors <目录>
+content analyze readiness <目录>
+```
+
 ## Decision shortcut
 
 - Need text from files -> `analyze extract` or `analyze transcribe`
 - Need judgment or topic choice -> `analyze trends`
+- Need judgment from an existing directory -> `analyze hooks|competitors|readiness <目录>`
 
 ## Preflight checks
 
 - `extract` 需要目录，不接受单个文件
 - `analyze transcribe` 需要本地视频文件
 - 趋势分析没有输入内容时，可以直接走 `content analyze trends`
+- `hooks` `competitors` `readiness` 都需要内容目录

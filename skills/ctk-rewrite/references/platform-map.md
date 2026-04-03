@@ -8,6 +8,22 @@
 - Transcript -> Xiaohongshu
 - Transcript -> WeChat
 
+## Supported platforms
+
+- `douyin`
+- `xiaohongshu`
+- `wechat`
+- `x`
+- `bilibili`
+- `kuaishou`
+- `tiktok`
+
+## Alias normalization
+
+- `xhs` -> `xiaohongshu`
+- `wx` / `weixin` -> `wechat`
+- `twitter` -> `x`
+
 ## Standard command
 
 ```bash
@@ -33,3 +49,4 @@ content rewrite <目录或文本> --from <source> --to <target>
 - If the user wants actual upload, route to publish or Xiaohongshu
 - 如果输入路径不存在，直接报文件不存在，不要猜
 - 如果缺 `--from` 或 `--to`，先补平台信息，不要硬改
+- 如果平台别名是 `xhs`、`wx`、`twitter`，先在本地规范成标准平台名再执行

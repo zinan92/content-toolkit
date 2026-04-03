@@ -47,6 +47,7 @@ content videocut speed input.mp4 -o output/ --rate 1.1
 Guardrails for all single actions:
 - 子命令后面必须跟本地视频文件
 - 如果文件不存在，直接报“视频文件不存在”
+- 如果子命令不在支持列表里，直接返回支持的子命令清单
 
 ## Full pipeline
 
@@ -66,3 +67,14 @@ Use this order unless the user clearly wants one isolated operation:
 ```text
 autocut -> speed -> subtitle -> hook -> clip -> cover
 ```
+
+## Supported subcommands
+
+- `transcribe`
+- `autocut`
+- `subtitle`
+- `hook`
+- `clip`
+- `cover`
+- `speed`
+- `pipeline`

@@ -11,8 +11,80 @@ const CAPABILITY_ALIASES = {
   intelligence: 'analyze',
 };
 
+const PLATFORM_ALIASES = {
+  xhs: 'xiaohongshu',
+  wx: 'wechat',
+  weixin: 'wechat',
+  twitter: 'x',
+};
+
+const SUPPORTED_REWRITE_PLATFORMS = new Set([
+  'douyin',
+  'xiaohongshu',
+  'wechat',
+  'x',
+  'bilibili',
+  'kuaishou',
+  'tiktok',
+]);
+
+const SUPPORTED_VIDEOCUT_ACTIONS = new Set([
+  'transcribe',
+  'autocut',
+  'subtitle',
+  'hook',
+  'clip',
+  'cover',
+  'speed',
+  'pipeline',
+]);
+
+const SUPPORTED_ANALYZE_MODES = new Set([
+  'extract',
+  'transcribe',
+  'trends',
+  'hooks',
+  'competitors',
+  'readiness',
+]);
+
 function normalizeCapabilityName(name) {
   return CAPABILITY_ALIASES[name] || name;
+}
+
+function normalizePlatformName(name) {
+  return PLATFORM_ALIASES[name] || name;
+}
+
+function normalizePlatformCsv(value) {
+  if (!value) return value;
+  return value
+    .split(',')
+    .map((part) => normalizePlatformName(part.trim()))
+    .filter(Boolean)
+    .join(',');
+}
+
+function normalizeCapabilityArgs(name, args) {
+  if (name === 'publish' && args.length > 0) {
+    return [normalizePlatformName(args[0]), ...args.slice(1)];
+  }
+
+  if (name === 'rewrite') {
+    const normalizedArgs = [...args];
+    for (let i = 0; i < normalizedArgs.length; i += 1) {
+      if ((normalizedArgs[i] === '--from' || normalizedArgs[i] === '--to') && normalizedArgs[i + 1]) {
+        normalizedArgs[i + 1] = normalizePlatformCsv(normalizedArgs[i + 1]);
+      } else if (normalizedArgs[i].startsWith('--from=')) {
+        normalizedArgs[i] = `--from=${normalizePlatformCsv(normalizedArgs[i].slice('--from='.length))}`;
+      } else if (normalizedArgs[i].startsWith('--to=')) {
+        normalizedArgs[i] = `--to=${normalizePlatformCsv(normalizedArgs[i].slice('--to='.length))}`;
+      }
+    }
+    return normalizedArgs;
+  }
+
+  return args;
 }
 
 function getCapabilityUsageHint(name, args) {
@@ -250,6 +322,15 @@ function validateRewriteArgs(args, cwd) {
   if (!getFlagValue(args, '--to')) {
     return missingFlagMessage('--to', '改写前要说明目标平台。');
   }
+  const sourcePlatform = normalizePlatformCsv(getFlagValue(args, '--from'));
+  if (!SUPPORTED_REWRITE_PLATFORMS.has(sourcePlatform)) {
+    return `不支持的来源平台：${sourcePlatform}。可用平台：${Array.from(SUPPORTED_REWRITE_PLATFORMS).join('、')}`;
+  }
+  const targetPlatforms = normalizePlatformCsv(getFlagValue(args, '--to')).split(',');
+  const unsupportedTarget = targetPlatforms.find((platform) => !SUPPORTED_REWRITE_PLATFORMS.has(platform));
+  if (unsupportedTarget) {
+    return `不支持的目标平台：${unsupportedTarget}。可用平台：${Array.from(SUPPORTED_REWRITE_PLATFORMS).join('、')}`;
+  }
   return null;
 }
 
@@ -259,8 +340,11 @@ function validateVideocutArgs(args, cwd) {
     return '缺少 videocut 子命令。试试：content videocut transcribe input.mp4';
   }
 
-  const actionsNeedVideoInput = new Set(['transcribe', 'autocut', 'subtitle', 'hook', 'clip', 'cover', 'speed', 'pipeline']);
-  if (actionsNeedVideoInput.has(action)) {
+  if (!SUPPORTED_VIDEOCUT_ACTIONS.has(action)) {
+    return `不支持的 videocut 子命令：${action}。可用子命令：${Array.from(SUPPORTED_VIDEOCUT_ACTIONS).join('、')}`;
+  }
+
+  if (SUPPORTED_VIDEOCUT_ACTIONS.has(action)) {
     const input = args[1];
     if (!input || input.startsWith('-')) {
       return '缺少视频文件。请在子命令后提供本地视频路径。';
@@ -372,9 +456,56 @@ function validateXiaohongshuArgs(args, cwd) {
   return null;
 }
 
+function validateAnalyzeArgs(args, cwd) {
+  const mode = args[0];
+  if (!mode) {
+    return '缺少分析模式。试试：content analyze <模式>';
+  }
+
+  if (!SUPPORTED_ANALYZE_MODES.has(mode)) {
+    return `不支持的 analyze 模式：${mode}。可用模式：${Array.from(SUPPORTED_ANALYZE_MODES).join('、')}`;
+  }
+
+  if (mode === 'trends') {
+    return null;
+  }
+
+  if (mode === 'transcribe') {
+    const input = args[1];
+    if (!input || input.startsWith('-')) {
+      return '缺少视频文件。请在 analyze transcribe 后提供本地视频路径。';
+    }
+    const resolvedInput = resolveInputPath(input, cwd);
+    if (!fs.existsSync(resolvedInput)) {
+      return fileNotFoundMessage('视频', resolvedInput);
+    }
+    if (fs.statSync(resolvedInput).isDirectory()) {
+      return `analyze transcribe 需要视频文件，不接受目录：${resolvedInput}`;
+    }
+    return null;
+  }
+
+  const input = args[1];
+  if (!input || input.startsWith('-')) {
+    return '缺少内容目录。试试：content analyze extract <内容目录>';
+  }
+  const resolvedInput = resolveInputPath(input, cwd);
+  if (!fs.existsSync(resolvedInput)) {
+    return fileNotFoundMessage('内容目录', resolvedInput);
+  }
+  if (!fs.statSync(resolvedInput).isDirectory()) {
+    return `analyze ${mode} 需要目录，不接受单个文件：${resolvedInput}`;
+  }
+  return null;
+}
+
 function validateCapabilityArgs(name, args, cwd = process.cwd()) {
   if (name === 'download') {
     return validateDownloadArgs(args, cwd);
+  }
+
+  if (name === 'analyze') {
+    return validateAnalyzeArgs(args, cwd);
   }
 
   if (name === 'extract') {
@@ -527,7 +658,8 @@ function showList(onlyInstalled) {
 
 function runCapability(name, args) {
   const normalizedName = normalizeCapabilityName(name);
-  const commandPlan = buildCommandPlan(normalizedName, args);
+  const normalizedArgs = normalizeCapabilityArgs(normalizedName, args);
+  const commandPlan = buildCommandPlan(normalizedName, normalizedArgs);
   const registry = loadRegistry();
   const cap = registry[normalizedName];
   if (!cap) {
@@ -542,13 +674,13 @@ function runCapability(name, args) {
     process.exit(1);
   }
 
-  const usageHint = getCapabilityUsageHint(normalizedName, args);
+  const usageHint = getCapabilityUsageHint(normalizedName, normalizedArgs);
   if (usageHint) {
     console.error(usageHint);
     process.exit(1);
   }
 
-  const validationError = validateCapabilityArgs(normalizedName, args, process.cwd());
+  const validationError = validateCapabilityArgs(normalizedName, normalizedArgs, process.cwd());
   if (validationError) {
     console.error(validationError);
     process.exit(1);
@@ -577,8 +709,8 @@ function runCapability(name, args) {
   // This covers -o/--output-dir values, --cookies paths, and positional input paths.
   const userCwd = process.cwd();
   const PATH_FLAGS = new Set(['-o', '--output-dir', '--cookies', '--style-dir', '--feedback-dir', '--output']);
-  const resolvedUserArgs = args.map((arg, i) => {
-    const prev = args[i - 1];
+  const resolvedUserArgs = normalizedArgs.map((arg, i) => {
+    const prev = normalizedArgs[i - 1];
     // Value after a path flag (space-separated: -o foo)
     if (prev && PATH_FLAGS.has(prev) && arg && !path.isAbsolute(arg)) {
       return path.resolve(userCwd, arg);
@@ -690,6 +822,7 @@ module.exports = {
   buildCommandPlan,
   getCapabilityUsageHint,
   normalizeCapabilityName,
+  normalizeCapabilityArgs,
   validateCapabilityArgs,
   runCapability,
   showHelp,
