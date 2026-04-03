@@ -86,6 +86,9 @@ function checkHealth(name) {
   const cap = getCapability(name);
   const capDir = capabilityPath(name);
 
+  // Reference-only capabilities (no entrypoint) — installed is the best state
+  if (!cap.entrypoint) return HEALTH.INSTALLED;
+
   // Check entrypoint resolves
   const [cmd] = cap.entrypoint.split(' ');
   if (cmd === 'node') {
