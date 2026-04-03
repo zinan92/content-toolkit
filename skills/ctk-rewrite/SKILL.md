@@ -67,6 +67,11 @@ content rewrite preset x-thread <目录或文本> --from <来源>
 - 具备发布可用性
 - 还需要封面、视频处理或平台内补动作
 
+Preset 的默认下一步：
+- `xiaohongshu-note` → `/ctk-xiaohongshu` 或 `/ctk-publish`
+- `wechat-article` → 继续润色长文，或进入发布
+- `x-thread` → 直接进入分发链路
+
 ## 下一步建议
 
 | 触发条件 | 推荐话术 |

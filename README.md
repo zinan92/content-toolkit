@@ -229,6 +229,11 @@ content analyze extract raw/
 content rewrite preset xiaohongshu-note raw/ --from douyin
 ```
 
+适合“素材已经拿到，目标平台也明确”的情况。
+- `xiaohongshu-note` 更像笔记成品稿
+- `wechat-article` 更适合长文整理
+- `x-thread` 更适合短句线程化表达
+
 ### 小红书站内观察 → 原生发布
 
 ```bash
