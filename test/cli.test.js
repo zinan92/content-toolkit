@@ -55,10 +55,22 @@ test('getCapabilityUsageHint returns rewrite help when no input is given', () =>
   assert.match(hint, /--to/);
 });
 
+test('getCapabilityUsageHint returns rewrite preset help when preset name is missing', () => {
+  const hint = getCapabilityUsageHint('rewrite', ['preset']);
+  assert.match(hint, /content rewrite preset <预设>/);
+  assert.match(hint, /xiaohongshu-note/);
+});
+
 test('getCapabilityUsageHint returns videocut help when no subcommand is given', () => {
   const hint = getCapabilityUsageHint('videocut', []);
   assert.match(hint, /content videocut <子命令> <视频文件>/);
   assert.match(hint, /transcribe/);
+});
+
+test('getCapabilityUsageHint returns videocut preset help when preset name is missing', () => {
+  const hint = getCapabilityUsageHint('videocut', ['preset']);
+  assert.match(hint, /content videocut preset <预设>/);
+  assert.match(hint, /short-form/);
 });
 
 test('getCapabilityUsageHint returns null when capability args are sufficient to continue', () => {
@@ -86,6 +98,22 @@ test('buildCommandPlan routes analyze transcribe to videocut transcribe', () => 
   assert.deepEqual(plan, {
     routeTo: 'videocut',
     args: ['transcribe', 'input.mp4'],
+  });
+});
+
+test('buildCommandPlan routes rewrite preset to canonical rewrite command', () => {
+  const plan = buildCommandPlan('rewrite', ['preset', 'xiaohongshu-note', 'draft.md', '--from', 'douyin']);
+  assert.deepEqual(plan, {
+    rerouteToSelf: 'rewrite',
+    args: ['draft.md', '--from', 'douyin', '--to', 'xiaohongshu'],
+  });
+});
+
+test('buildCommandPlan routes videocut preset to pipeline command', () => {
+  const plan = buildCommandPlan('videocut', ['preset', 'short-form', 'input.mp4', '-o', 'output/']);
+  assert.deepEqual(plan, {
+    rerouteToSelf: 'videocut',
+    args: ['pipeline', 'input.mp4', '--steps', 'autocut,speed,subtitle,hook,cover', '-o', 'output/'],
   });
 });
 
@@ -197,6 +225,16 @@ test('validateCapabilityArgs catches missing rewrite source platform', () => {
   assert.match(msg, /缺少 --from/);
 });
 
+test('validateCapabilityArgs catches missing rewrite preset name', () => {
+  const msg = validateCapabilityArgs('rewrite', ['preset'], process.cwd());
+  assert.match(msg, /缺少 rewrite preset 名称/);
+});
+
+test('validateCapabilityArgs catches unsupported rewrite preset', () => {
+  const msg = validateCapabilityArgs('rewrite', ['preset', 'viral-post', __filename, '--from', 'douyin'], process.cwd());
+  assert.match(msg, /不支持的 rewrite preset/);
+});
+
 test('validateCapabilityArgs catches missing rewrite target platform', () => {
   const msg = validateCapabilityArgs('rewrite', [__filename, '--from', 'douyin'], process.cwd());
   assert.match(msg, /缺少 --to/);
@@ -210,6 +248,16 @@ test('validateCapabilityArgs catches missing rewrite input file or directory', (
 test('validateCapabilityArgs catches missing videocut input file', () => {
   const msg = validateCapabilityArgs('videocut', ['transcribe']);
   assert.match(msg, /缺少视频文件/);
+});
+
+test('validateCapabilityArgs catches missing videocut preset name', () => {
+  const msg = validateCapabilityArgs('videocut', ['preset']);
+  assert.match(msg, /缺少 videocut preset 名称/);
+});
+
+test('validateCapabilityArgs catches unsupported videocut preset', () => {
+  const msg = validateCapabilityArgs('videocut', ['preset', 'hyper-edit', __filename], process.cwd());
+  assert.match(msg, /不支持的 videocut preset/);
 });
 
 test('validateCapabilityArgs catches missing videocut pipeline steps', () => {

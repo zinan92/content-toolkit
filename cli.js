@@ -28,6 +28,12 @@ const SUPPORTED_REWRITE_PLATFORMS = new Set([
   'tiktok',
 ]);
 
+const REWRITE_PRESETS = {
+  'xiaohongshu-note': { to: 'xiaohongshu' },
+  'wechat-article': { to: 'wechat' },
+  'x-thread': { to: 'x' },
+};
+
 const SUPPORTED_VIDEOCUT_ACTIONS = new Set([
   'transcribe',
   'autocut',
@@ -38,6 +44,12 @@ const SUPPORTED_VIDEOCUT_ACTIONS = new Set([
   'speed',
   'pipeline',
 ]);
+
+const VIDEOCUT_PRESETS = {
+  'short-form': 'autocut,speed,subtitle,hook,cover',
+  'subtitle-hook': 'subtitle,hook',
+  'repurpose-clips': 'autocut,subtitle,clip,cover',
+};
 
 const SUPPORTED_ANALYZE_MODES = new Set([
   'extract',
@@ -121,7 +133,18 @@ function getCapabilityUsageHint(name, args) {
     return [
       'rewrite 需要输入内容和平台信息。试试这些：',
       '  content rewrite <内容目录或文本文件> --from <来源> --to <目标>',
+      '  content rewrite preset xiaohongshu-note ./output/video123/ --from douyin',
       '  content rewrite ./output/video123/ --from douyin --to xiaohongshu',
+    ].join('\n');
+  }
+
+  if (name === 'rewrite' && args[0] === 'preset' && args.length === 1) {
+    return [
+      'rewrite preset 需要一个预设名称。试试这些：',
+      '  content rewrite preset <预设> <内容目录或文本文件> --from <来源>',
+      '  content rewrite preset xiaohongshu-note ./output/video123/ --from douyin',
+      '  content rewrite preset wechat-article ./output/video123/ --from douyin',
+      '  content rewrite preset x-thread draft.md --from wechat',
     ].join('\n');
   }
 
@@ -130,7 +153,18 @@ function getCapabilityUsageHint(name, args) {
       'videocut 需要子命令和视频文件。试试这些：',
       '  content videocut <子命令> <视频文件>',
       '  content videocut transcribe input.mp4',
+      '  content videocut preset short-form input.mp4 -o output/',
       '  content videocut pipeline input.mp4 --steps autocut,subtitle',
+    ].join('\n');
+  }
+
+  if (name === 'videocut' && args[0] === 'preset' && args.length === 1) {
+    return [
+      'videocut preset 需要一个预设名称。试试这些：',
+      '  content videocut preset <预设> <视频文件> -o output/',
+      '  content videocut preset short-form input.mp4 -o output/',
+      '  content videocut preset subtitle-hook input.mp4 -o output/',
+      '  content videocut preset repurpose-clips input.mp4 -o output/',
     ].join('\n');
   }
 
@@ -308,6 +342,18 @@ function validateExtractArgs(args, cwd) {
 }
 
 function validateRewriteArgs(args, cwd) {
+  if (args[0] === 'preset') {
+    const presetName = args[1];
+    if (!presetName) {
+      return '缺少 rewrite preset 名称。试试：content rewrite preset xiaohongshu-note <内容目录或文本文件> --from douyin';
+    }
+    if (!REWRITE_PRESETS[presetName]) {
+      return `不支持的 rewrite preset：${presetName}。可用 preset：${Object.keys(REWRITE_PRESETS).join('、')}`;
+    }
+    const presetArgs = [...args.slice(2), '--to', REWRITE_PRESETS[presetName].to];
+    return validateRewriteArgs(presetArgs, cwd);
+  }
+
   const input = args[0];
   if (!input) {
     return '缺少输入内容。试试：content rewrite <内容目录或文本文件> --from douyin --to xiaohongshu';
@@ -338,6 +384,25 @@ function validateVideocutArgs(args, cwd) {
   const action = args[0];
   if (!action) {
     return '缺少 videocut 子命令。试试：content videocut transcribe input.mp4';
+  }
+
+  if (action === 'preset') {
+    const presetName = args[1];
+    if (!presetName) {
+      return '缺少 videocut preset 名称。试试：content videocut preset short-form input.mp4 -o output/';
+    }
+    if (!VIDEOCUT_PRESETS[presetName]) {
+      return `不支持的 videocut preset：${presetName}。可用 preset：${Object.keys(VIDEOCUT_PRESETS).join('、')}`;
+    }
+    const input = args[2];
+    if (!input || input.startsWith('-')) {
+      return '缺少视频文件。请在 videocut preset 后提供本地视频路径。';
+    }
+    const resolvedInput = resolveInputPath(input, cwd);
+    if (!fs.existsSync(resolvedInput)) {
+      return fileNotFoundMessage('视频', resolvedInput);
+    }
+    return null;
   }
 
   if (!SUPPORTED_VIDEOCUT_ACTIONS.has(action)) {
@@ -532,6 +597,26 @@ function validateCapabilityArgs(name, args, cwd = process.cwd()) {
 }
 
 function buildCommandPlan(name, args) {
+  if (name === 'rewrite' && args[0] === 'preset') {
+    const preset = REWRITE_PRESETS[args[1]];
+    if (preset) {
+      return {
+        rerouteToSelf: 'rewrite',
+        args: [...args.slice(2), '--to', preset.to],
+      };
+    }
+  }
+
+  if (name === 'videocut' && args[0] === 'preset') {
+    const steps = VIDEOCUT_PRESETS[args[1]];
+    if (steps) {
+      return {
+        rerouteToSelf: 'videocut',
+        args: ['pipeline', args[2], '--steps', steps, ...args.slice(3)],
+      };
+    }
+  }
+
   if (name === 'analyze' && args[0] === 'extract') {
     return {
       routeTo: 'extract',
@@ -596,6 +681,7 @@ content-toolkit — AI 内容生产工具箱
   抖音→小红书           content rewrite ./output/video123/ --from douyin --to xiaohongshu
   抖音→公众号           content rewrite ./output/video123/ --from douyin --to wechat
   抖音→两个平台         content rewrite ./output/video123/ --from douyin --to xiaohongshu,wechat
+  小红书笔记预设         content rewrite preset xiaohongshu-note ./output/video123/ --from douyin
 
   ⚠️  rewrite 需要先跑过 extract（自动生成 extractor_output.json）
   ⚠️  也支持直接传 .md/.txt 文件
@@ -608,6 +694,7 @@ content-toolkit — AI 内容生产工具箱
   拆成多个短视频        content videocut clip input.mp4 -o output/
   生成封面/金句卡        content videocut cover input.mp4 --text "你的金句"
   加速(1.0-1.2x)       content videocut speed input.mp4 --rate 1.2 -o output/
+  短视频预设            content videocut preset short-form input.mp4 -o output/
   一条龙处理            content videocut pipeline input.mp4 --steps autocut,subtitle -o output/
 
 小红书原生操作         content xiaohongshu <子命令>
@@ -687,6 +774,10 @@ function runCapability(name, args) {
   }
 
   if (commandPlan) {
+    if (commandPlan.rerouteToSelf) {
+      runCapability(commandPlan.rerouteToSelf, commandPlan.args);
+      return;
+    }
     if (commandPlan.routeTo) {
       runCapability(commandPlan.routeTo, commandPlan.args);
       return;

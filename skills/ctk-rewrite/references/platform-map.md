@@ -30,6 +30,12 @@
 content rewrite <目录或文本> --from <source> --to <target>
 ```
 
+Preset shortcut:
+
+```bash
+content rewrite preset xiaohongshu-note <目录或文本> --from <source>
+```
+
 如果用户没有把平台说完整，不要开始改写。
 
 至少要确认：

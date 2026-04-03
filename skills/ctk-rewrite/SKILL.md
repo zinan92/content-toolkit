@@ -52,6 +52,14 @@ description: |
 content rewrite <目录或文本> --from <来源> --to <目标>
 ```
 
+常见平台也可以直接走 preset：
+
+```bash
+content rewrite preset xiaohongshu-note <目录或文本> --from <来源>
+content rewrite preset wechat-article <目录或文本> --from <来源>
+content rewrite preset x-thread <目录或文本> --from <来源>
+```
+
 ### Phase 4：检查结果
 
 确认产出是否：
@@ -71,8 +79,9 @@ content rewrite <目录或文本> --from <来源> --to <目标>
 ## 参考资源
 
 - 平台差异与输入格式：`references/platform-map.md`
+- 常用 preset：`references/presets.md`
 - 常见失败与补救：`references/troubleshooting.md`
-- 脚本模板：`scripts/rewrite_platform.sh`
+- 脚本模板：`scripts/rewrite_platform.sh` `scripts/rewrite_preset.sh`
 
 ## 边界
 

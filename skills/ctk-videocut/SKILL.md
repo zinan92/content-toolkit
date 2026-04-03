@@ -43,6 +43,14 @@ description: |
 
 具体命令矩阵见 `references/subcommands.md`。
 
+如果用户要的是常见成品流，优先走 preset：
+
+```bash
+content videocut preset short-form <视频文件> -o output/
+content videocut preset subtitle-hook <视频文件> -o output/
+content videocut preset repurpose-clips <视频文件> -o output/
+```
+
 ### Phase 3：必要时按顺序串联
 
 推荐顺序：
@@ -68,8 +76,9 @@ autocut -> speed -> subtitle -> hook -> clip -> cover
 ## 参考资源
 
 - 子命令矩阵：`references/subcommands.md`
+- 常用 preset：`references/presets.md`
 - 常见失败与补救：`references/troubleshooting.md`
-- 脚本模板：`scripts/videocut_pipeline.sh`
+- 脚本模板：`scripts/videocut_pipeline.sh` `scripts/videocut_preset.sh`
 
 ## 边界
 

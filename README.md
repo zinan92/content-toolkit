@@ -67,6 +67,7 @@ content-toolkit — AI 内容生产工具箱
 
 改写成其他平台        content rewrite <内容目录> --from <来源> --to <目标>
   抖音→小红书           content rewrite ./output/video123/ --from douyin --to xiaohongshu
+  小红书笔记预设         content rewrite preset xiaohongshu-note ./output/video123/ --from douyin
 
 编辑视频              content videocut <子命令> <视频文件>
   转录视频为文字        content videocut transcribe input.mp4
@@ -75,6 +76,7 @@ content-toolkit — AI 内容生产工具箱
   截精彩片段            content videocut hook input.mp4 -o output/
   拆成多个短视频        content videocut clip input.mp4 -o output/
   生成封面/金句卡        content videocut cover input.mp4 --text "你的金句"
+  短视频预设            content videocut preset short-form input.mp4 -o output/
   一条龙处理            content videocut pipeline input.mp4 --steps autocut,subtitle -o output/
 
 小红书原生操作         content xiaohongshu <子命令>
@@ -224,7 +226,7 @@ content videocut pipeline ~/录制.mp4 --steps autocut,speed,subtitle,hook,cover
 ```bash
 content download https://douyin.com/video/xxx -o raw/
 content analyze extract raw/
-content rewrite raw/ --from douyin --to xiaohongshu
+content rewrite preset xiaohongshu-note raw/ --from douyin
 ```
 
 ### 小红书站内观察 → 原生发布
@@ -246,6 +248,12 @@ content publish douyin upload-video --account creator --file demo.mp4 --title "�
 
 ```bash
 content videocut clip ~/长视频.mp4 -o clips/
+```
+
+### 常见短视频成品流
+
+```bash
+content videocut preset short-form ~/录制.mp4 -o output/
 ```
 
 ## 技术栈
