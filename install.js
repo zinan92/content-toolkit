@@ -59,8 +59,29 @@ function writeMeta(name, meta) {
 
 const HEALTH = { NOT_INSTALLED: 'not_installed', INSTALLED: 'installed', DEGRADED: 'degraded', UNAVAILABLE: 'unavailable' };
 
+function backfillMeta(name) {
+  if (!isInstalled(name) || readMeta(name)) return;
+  const capDir = capabilityPath(name);
+  let installedRef = 'unknown';
+  try {
+    installedRef = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
+      cwd: capDir, encoding: 'utf8',
+    }).trim();
+  } catch { /* ignore */ }
+  writeMeta(name, {
+    installed_ref: installedRef,
+    installed_at: 'pre-v2',
+    source: 'primary',
+    health: 'installed',
+    last_verified: new Date().toISOString(),
+  });
+}
+
 function checkHealth(name) {
   if (!isInstalled(name)) return HEALTH.NOT_INSTALLED;
+
+  // Backfill metadata for pre-v2 installs
+  backfillMeta(name);
 
   const cap = getCapability(name);
   const capDir = capabilityPath(name);
