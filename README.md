@@ -2,19 +2,19 @@
 
 # content-toolkit
 
-**AI 内容生产工具箱。一个 CLI，五大能力按需安装。URL/视频/文章进去，下载/转录/改写/剪辑出来。**
+**AI 社交媒体工作流工具箱。一个 CLI，加上一套 router skill 和子 skills，把下载、分析、改写、剪辑、发布、小红书原生操作串成一条链。**
 
 [![Node.js](https://img.shields.io/badge/node-18+-339933.svg)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Capabilities](https://img.shields.io/badge/capabilities-5-blue.svg)](#功能一览)
+[![Capabilities](https://img.shields.io/badge/capabilities-7-blue.svg)](#功能一览)
 
 </div>
 
 ---
 
-```
-in  URL | 视频文件 | 文本文件 | 内容目录
-out 下载素材 + 转录文本 + 平台文案 + 剪辑视频 + 字幕 + 金句片段 + 封面卡片
+```text
+in  URL | 视频文件 | 文本文件 | 内容目录 | 平台任务
+out 下载素材 + 转录文本 + 平台文案 + 剪辑视频 + 字幕 + 金句片段 + 封面卡片 + 多平台发布 + 小红书原生动作
 
 fail 能力未安装     → 自动 git clone 对应 repo + 创建 venv + 安装依赖，首次约 10-30s
 fail 系统依赖缺失   → 报告缺少的工具 (ffmpeg/whisper/claude) + 安装指引
@@ -22,6 +22,22 @@ fail 能力执行失败   → 透传上游错误信息，中间文件保留用�
 fail 直接传 URL     → 智能提示 "看起来你想下载内容？试试 content download <URL>"
 fail 直接传 .mp4    → 智能提示对应的 videocut 子命令
 ```
+
+## 现在它是什么
+
+`content-toolkit` 现在不只是一个 CLI。
+
+它由两层组成：
+
+1. 一个统一入口 `content`
+2. 一套 dbskill 风格的 skill 系统
+
+这套 skill 系统分成两类：
+
+- 工作流 skill：`ctk-download` `ctk-analyze` `ctk-rewrite` `ctk-videocut` `ctk-publish`
+- 平台 skill：`ctk-xiaohongshu`
+
+根 skill `SKILL.md` 是总控，不负责把所有细节写死。细节会下沉到各个 skill 自己的 `references/` 和 `scripts/` 里。
 
 ## 示例输出
 
@@ -54,6 +70,16 @@ content-toolkit — AI 内容生产工具箱
   生成封面/金句卡        content videocut cover input.mp4 --text "你的金句"
   一条龙处理            content videocut pipeline input.mp4 --steps autocut,subtitle -o output/
 
+小红书原生操作         content xiaohongshu <子命令>
+  检查登录状态          content xiaohongshu check-login
+  搜索笔记              content xiaohongshu search-feeds --keyword "露营"
+  发布图文              content xiaohongshu publish --title-file title.txt --content-file body.txt --images /abs/path/1.jpg
+
+多平台发布             content publish <平台子命令>
+  发小红书视频          content publish xiaohongshu upload-video --account creator --file demo.mp4 --title "标题" --desc "描述"
+  发小红书图文          content publish xiaohongshu upload-note --account creator --images 1.jpg 2.jpg --title "标题" --note "正文"
+  批量定时发布          content publish batch manifest.json --account creator --dry-run
+
 管理:
   content list              查看所有能力及安装状态
   content install <name>    预装一个能力
@@ -82,12 +108,22 @@ $ content videocut autocut ~/录制.mp4 -o /tmp/demo/ --no-review
 ## 架构
 
 ```
-                          content  (统一 CLI 入口)
+                      content + root SKILL.md
+               (统一 CLI 入口 + 社媒总控 router)
                               │
               ┌───────────────┼───────────────┐
               │               │               │
-         registry.json   install.js      capabilities/
-         (能力注册表)     (按需安装器)      (初始为空)
+         registry.json   install.js         skills/
+         (能力注册表)     (按需安装器)   (router + 子 skills)
+              │                                 │
+              │                     ┌───────────┴───────────┐
+              │                     │                       │
+              │                工作流 skills            平台 skills
+              │                ctk-download            ctk-xiaohongshu
+              │                ctk-analyze
+              │                ctk-rewrite
+              │                ctk-videocut
+              │                ctk-publish
                               │
                     首次使用时自动执行:
                     1. git clone --depth 1
@@ -95,13 +131,13 @@ $ content videocut autocut ~/录制.mp4 -o /tmp/demo/ --no-review
                     3. 创建 .venv + pip install -e .
                     4. 解析 entry → venv/bin CLI 命令
                               │
-              ┌───────┬───────┼───────┬───────┐
-              ▼       ▼       ▼       ▼       ▼
-          download  extract rewrite videocut intelligence
-          Python    Python  Python  Node.js  Python
-              │       │       │       │       │
-              ▼       ▼       ▼       ▼       ▼
-          各自独立的 GitHub repo，独立开发和版本控制
+          ┌───────┬───────┬────────┬──────────┬──────────────┬─────────────┐
+          ▼       ▼       ▼        ▼          ▼              ▼
+      download  extract rewrite videocut intelligence     publish       xiaohongshu
+      Python    Python  Python  Node.js   Python         Python/CLI      Python/Browser
+          │       │       │        │          │              │              │
+          ▼       ▼       ▼        ▼          ▼              ▼              ▼
+      各自独立的 GitHub repo，独立开发和版本控制
 ```
 
 ## 快速开始
@@ -126,9 +162,28 @@ node cli.js list
 |---|------|------|------|------|
 | 1 | intelligence | `content intelligence` | 趋势检测 / 爆款归因 / 选题建议 | 计划中 |
 | 2 | download | `content download <URL>` | 统一下载 (抖音/小红书/公众号/X) | 已完成 |
-| 3 | extract | `content extract <目录\|视频文件>` | 多模态提取 (转录/OCR/清洗)，支持裸视频文件 | 已完成 |
+| 3 | extract | `content extract <目录>` | 多模态提取 (转录/OCR/清洗)，面向下载后的内容目录 | 已完成 |
 | 4 | rewrite | `content rewrite <目录\|文本文件>` | 跨平台改写，支持裸 .md/.txt + 默认参数 | 已完成 |
 | 5 | videocut | `content videocut <子命令>` | 视频编辑 (7 个子能力)，支持批量目录输入 | 已完成 |
+| 6 | publish | `content publish <平台子命令>` | 多平台发布、定时发布、批量发布 | 已接入 |
+| 7 | xiaohongshu | `content xiaohongshu <子命令>` | 小红书站内登录、搜索、互动、原生发布 | 已接入 |
+
+## Skill System
+
+| Skill | 本质 | 作用 |
+|---|---|---|
+| `content-toolkit` | 总控 router | 识别卡点，分发到正确子 skill |
+| `ctk-download` | 内容获取流程 | 从 URL 或平台抓原始素材 |
+| `ctk-analyze` | 内容分析流程 | 转录、OCR、趋势、竞品、发布前判断 |
+| `ctk-rewrite` | 平台改写流程 | 把内容改成目标平台表达 |
+| `ctk-videocut` | 视频处理流程 | 字幕、粗剪、hook、拆条、封面 |
+| `ctk-publish` | 分发流程 | 多平台、一稿多发、定时、批量 |
+| `ctk-xiaohongshu` | 平台原生流程 | 小红书登录、搜索、互动、发布 |
+
+每个 skill 都尽量遵循同一个结构：
+- `SKILL.md`：角色、哲学、Phase 工作流、路由规则
+- `references/`：命令契约、矩阵、检查清单、故障排查
+- `scripts/`：稳定命令模板和参数预处理
 
 ### Videocut 子能力
 
@@ -156,7 +211,22 @@ content videocut pipeline ~/录制.mp4 --steps autocut,speed,subtitle,hook,cover
 ```bash
 content download https://douyin.com/video/xxx -o raw/
 content extract raw/
-content rewrite raw/transcript.md --platform xhs
+content rewrite raw/ --from douyin --to xiaohongshu
+```
+
+### 小红书站内观察 → 原生发布
+
+```bash
+content xiaohongshu check-login
+content xiaohongshu search-feeds --keyword "露营"
+content xiaohongshu publish --title-file title.txt --content-file body.txt --images /abs/path/1.jpg
+```
+
+### 一稿多平台发布
+
+```bash
+content publish xiaohongshu upload-video --account creator --file demo.mp4 --title "标题" --desc "描述"
+content publish douyin upload-video --account creator --file demo.mp4 --title "标题" --desc "描述"
 ```
 
 ### 长视频拆条
@@ -184,19 +254,36 @@ content-toolkit/
 ├── cli.js            # 统一入口 (路由 + venv/bin 解析 + 中文帮助)
 ├── install.js        # 懒加载安装器 (clone + venv + pip install)
 ├── registry.json     # 能力注册表 (repo URL + entry point + 依赖)
+├── skills/           # dbskill 风格 skill 系统
+│   ├── ctk-download/
+│   ├── ctk-analyze/
+│   ├── ctk-rewrite/
+│   ├── ctk-videocut/
+│   ├── ctk-publish/
+│   └── ctk-xiaohongshu/
 ├── capabilities/     # 初始为空，按需填充
 │   ├── download/     # → zinan92/content-downloader
 │   ├── extract/      # → zinan92/content-extractor
 │   ├── rewrite/      # → zinan92/content-rewriter
 │   ├── videocut/     # → zinan92/videocut
-│   └── intelligence/ # → zinan92/content-intelligence
-├── SKILL.md          # Agent 入口 (意图匹配 + 决策树)
+│   ├── intelligence/ # → zinan92/content-intelligence
+│   ├── publish/      # → dreammis/social-auto-upload
+│   └── xiaohongshu/  # → autoclaw-cc/xiaohongshu-skills
+├── SKILL.md          # 根 skill：社媒总控 router
+├── docs/plans/       # 设计与实现计划
 └── README.md
 ```
 
 ## For AI Agents
 
-读 `SKILL.md` 获取完整路由逻辑。SKILL.md 包含意图匹配表和决策树，告诉 agent 用户说什么话该用什么能力。
+读根 [SKILL.md](./SKILL.md) 获取完整路由逻辑。
+
+建议顺序：
+
+1. 先读根 `SKILL.md`
+2. 根据用户任务进入对应子 skill
+3. 只在需要时读取该子 skill 的 `references/`
+4. 命令容易出错时，优先复用该 skill 自带的 `scripts/`
 
 ### Capability Contract
 
@@ -204,9 +291,9 @@ content-toolkit/
 name: content-toolkit
 version: 1.0.0
 capability:
-  summary: Unified CLI for AI content pipeline — lazy-install capabilities on first use
-  in: URL | video file | text file | content directory
-  out: downloaded media + transcripts + platform copy + edited video + subtitles + hooks + cards
+  summary: Unified CLI plus router skill system for social media operations
+  in: URL | video file | text file | content directory | platform-native task
+  out: downloaded media + transcripts + platform copy + edited video + subtitles + hooks + cards + published posts + Xiaohongshu-native actions
   fail:
     - "capability not installed → auto clone + venv + pip install"
     - "missing system dependency → report + install instructions"
@@ -218,7 +305,7 @@ cli_args:
   - name: capability
     type: string
     required: true
-    description: "能力名称 (download/extract/rewrite/videocut/intelligence)"
+    description: "能力名称 (download/extract/rewrite/videocut/intelligence/publish/xiaohongshu)"
   - name: subcommand
     type: string
     required: false
@@ -267,6 +354,24 @@ for cmd in [
     subprocess.run(cmd, cwd="/path/to/content-toolkit", check=True)
 ```
 
+```python
+# 小红书搜索
+subprocess.run(
+    ["node", "cli.js", "xiaohongshu", "search-feeds", "--keyword", "露营"],
+    cwd="/path/to/content-toolkit",
+    check=True,
+)
+
+# 多平台发布
+subprocess.run(
+    ["node", "cli.js", "publish", "xiaohongshu", "upload-video",
+     "--account", "creator", "--file", "/abs/path/demo.mp4",
+     "--title", "标题", "--desc", "描述"],
+    cwd="/path/to/content-toolkit",
+    check=True,
+)
+```
+
 ## 相关项目
 
 | 项目 | 说明 | 链接 |
@@ -276,6 +381,8 @@ for cmd in [
 | content-extractor | 多模态内容提取 | [zinan92/content-extractor](https://github.com/zinan92/content-extractor) |
 | content-rewriter | 跨平台内容改写 | [zinan92/content-rewriter](https://github.com/zinan92/content-rewriter) |
 | videocut | 视频编辑能力集 (7 个独立能力) | [zinan92/videocut](https://github.com/zinan92/videocut) |
+| social-auto-upload | 多平台发布引擎 | [dreammis/social-auto-upload](https://github.com/dreammis/social-auto-upload) |
+| xiaohongshu-skills | 小红书平台原生能力 | [autoclaw-cc/xiaohongshu-skills](https://github.com/autoclaw-cc/xiaohongshu-skills) |
 
 ## License
 

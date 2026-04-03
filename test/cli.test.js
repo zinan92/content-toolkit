@@ -1,0 +1,165 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const {
+  buildCommandPlan,
+  validateCapabilityArgs,
+  normalizeCapabilityName,
+  getCapabilityUsageHint,
+} = require('../cli.js');
+
+test('normalizeCapabilityName maps xhs alias to xiaohongshu', () => {
+  assert.equal(normalizeCapabilityName('xhs'), 'xiaohongshu');
+});
+
+test('normalizeCapabilityName leaves known capability names unchanged', () => {
+  assert.equal(normalizeCapabilityName('publish'), 'publish');
+  assert.equal(normalizeCapabilityName('download'), 'download');
+});
+
+test('getCapabilityUsageHint returns publish help when no subcommand is given', () => {
+  const hint = getCapabilityUsageHint('publish', []);
+  assert.match(hint, /content publish <平台子命令>/);
+  assert.match(hint, /upload-video/);
+});
+
+test('getCapabilityUsageHint returns xiaohongshu help when no subcommand is given', () => {
+  const hint = getCapabilityUsageHint('xiaohongshu', []);
+  assert.match(hint, /content xiaohongshu <子命令>/);
+  assert.match(hint, /search-feeds/);
+});
+
+test('getCapabilityUsageHint returns download help when no URL is given', () => {
+  const hint = getCapabilityUsageHint('download', []);
+  assert.match(hint, /content download <URL>/);
+  assert.match(hint, /fetch-cookies/);
+});
+
+test('getCapabilityUsageHint returns rewrite help when no input is given', () => {
+  const hint = getCapabilityUsageHint('rewrite', []);
+  assert.match(hint, /content rewrite <内容目录或文本文件>/);
+  assert.match(hint, /--from/);
+  assert.match(hint, /--to/);
+});
+
+test('getCapabilityUsageHint returns videocut help when no subcommand is given', () => {
+  const hint = getCapabilityUsageHint('videocut', []);
+  assert.match(hint, /content videocut <子命令> <视频文件>/);
+  assert.match(hint, /transcribe/);
+});
+
+test('getCapabilityUsageHint returns null when capability args are sufficient to continue', () => {
+  assert.equal(getCapabilityUsageHint('publish', ['xiaohongshu', 'upload-video']), null);
+  assert.equal(getCapabilityUsageHint('xiaohongshu', ['check-login']), null);
+});
+
+test('buildCommandPlan routes publish batch to the local batch-publish script', () => {
+  const plan = buildCommandPlan('publish', ['batch', 'manifest.json', '--account', 'creator']);
+  assert.equal(plan.executable, 'python3');
+  assert.match(plan.args[0], /scripts\/batch-publish\.py$/);
+  assert.deepEqual(plan.args.slice(1), ['manifest.json', '--account', 'creator']);
+});
+
+test('validateCapabilityArgs catches missing publish account', () => {
+  const msg = validateCapabilityArgs('publish', ['xiaohongshu', 'upload-video', '--file', 'demo.mp4', '--title', '标题', '--desc', '描述']);
+  assert.match(msg, /缺少 --account/);
+});
+
+test('validateCapabilityArgs catches missing batch publish account', () => {
+  const msg = validateCapabilityArgs('publish', ['batch', __filename]);
+  assert.match(msg, /缺少 --account/);
+});
+
+test('validateCapabilityArgs catches missing publish video file', () => {
+  const msg = validateCapabilityArgs('publish', ['xiaohongshu', 'upload-video', '--account', 'creator', '--title', '标题', '--desc', '描述']);
+  assert.match(msg, /缺少 --file/);
+});
+
+test('validateCapabilityArgs catches missing publish note images', () => {
+  const msg = validateCapabilityArgs('publish', ['xiaohongshu', 'upload-note', '--account', 'creator', '--title', '标题', '--note', '正文']);
+  assert.match(msg, /缺少 --images/);
+});
+
+test('validateCapabilityArgs catches missing xiaohongshu search keyword', () => {
+  const msg = validateCapabilityArgs('xiaohongshu', ['search-feeds']);
+  assert.match(msg, /缺少 --keyword/);
+});
+
+test('validateCapabilityArgs catches missing xiaohongshu publish video path', () => {
+  const msg = validateCapabilityArgs('xiaohongshu', ['publish-video', '--title-file', __filename, '--content-file', __filename]);
+  assert.match(msg, /缺少 --video/);
+});
+
+test('validateCapabilityArgs catches missing local file paths when a publish file does not exist', () => {
+  const msg = validateCapabilityArgs(
+    'publish',
+    ['xiaohongshu', 'upload-video', '--account', 'creator', '--file', 'missing.mp4', '--title', '标题', '--desc', '描述'],
+    '/tmp'
+  );
+  assert.match(msg, /文件不存在/);
+  assert.match(msg, /missing\.mp4/);
+});
+
+test('validateCapabilityArgs accepts a fully specified publish video command shape', () => {
+  const msg = validateCapabilityArgs(
+    'publish',
+    ['xhs', 'upload-video', '--account', 'creator', '--file', __filename, '--title', '标题', '--desc', '描述'],
+    process.cwd()
+  );
+  assert.equal(msg, null);
+});
+
+test('validateCapabilityArgs accepts fetch-cookies as a valid download action', () => {
+  const msg = validateCapabilityArgs('download', ['fetch-cookies']);
+  assert.equal(msg, null);
+});
+
+test('validateCapabilityArgs catches missing download URL', () => {
+  const msg = validateCapabilityArgs('download', []);
+  assert.match(msg, /content download <URL>/);
+});
+
+test('validateCapabilityArgs catches non-url download input', () => {
+  const msg = validateCapabilityArgs('download', ['not-a-url']);
+  assert.match(msg, /下载需要一个 URL/);
+});
+
+test('validateCapabilityArgs catches missing extract input directory', () => {
+  const msg = validateCapabilityArgs('extract', []);
+  assert.match(msg, /缺少内容目录/);
+});
+
+test('validateCapabilityArgs rejects extract input when it is a file not a directory', () => {
+  const msg = validateCapabilityArgs('extract', [__filename], process.cwd());
+  assert.match(msg, /需要目录/);
+});
+
+test('validateCapabilityArgs catches missing rewrite source platform', () => {
+  const msg = validateCapabilityArgs('rewrite', [__filename, '--to', 'xiaohongshu'], process.cwd());
+  assert.match(msg, /缺少 --from/);
+});
+
+test('validateCapabilityArgs catches missing rewrite target platform', () => {
+  const msg = validateCapabilityArgs('rewrite', [__filename, '--from', 'douyin'], process.cwd());
+  assert.match(msg, /缺少 --to/);
+});
+
+test('validateCapabilityArgs catches missing rewrite input file or directory', () => {
+  const msg = validateCapabilityArgs('rewrite', ['missing.md', '--from', 'douyin', '--to', 'xiaohongshu'], '/tmp');
+  assert.match(msg, /文件不存在/);
+});
+
+test('validateCapabilityArgs catches missing videocut input file', () => {
+  const msg = validateCapabilityArgs('videocut', ['transcribe']);
+  assert.match(msg, /缺少视频文件/);
+});
+
+test('validateCapabilityArgs catches missing videocut pipeline steps', () => {
+  const msg = validateCapabilityArgs('videocut', ['pipeline', __filename], process.cwd());
+  assert.match(msg, /缺少 --steps/);
+});
+
+test('validateCapabilityArgs accepts a valid rewrite command shape', () => {
+  const msg = validateCapabilityArgs('rewrite', [__filename, '--from', 'douyin', '--to', 'xiaohongshu'], process.cwd());
+  assert.equal(msg, null);
+});
