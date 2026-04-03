@@ -1,0 +1,127 @@
+{
+  "schema_version": "2.0",
+  "capabilities": {
+    "download": {
+      "id": "download",
+      "name": "Content Downloader",
+      "kind": "first-party",
+      "repo": "zinan92/content-downloader",
+      "primary_ref": "main",
+      "fallback_repo": null,
+      "fallback_ref": null,
+      "skill_path": "SKILL.md",
+      "entrypoint": "content-downloader download",
+      "install": {
+        "method": "git-clone",
+        "python_deps": true,
+        "node_deps": false
+      },
+      "update": {
+        "method": "git-pull"
+      },
+      "dependencies": ["python3"],
+      "tags": ["download", "douyin", "xiaohongshu", "wechat", "x"],
+      "workflow_before": [],
+      "workflow_after": ["extract", "intelligence"],
+      "status": "active"
+    },
+    "extract": {
+      "id": "extract",
+      "name": "Content Extractor",
+      "kind": "first-party",
+      "repo": "zinan92/content-extractor",
+      "primary_ref": "main",
+      "fallback_repo": null,
+      "fallback_ref": null,
+      "skill_path": "SKILL.md",
+      "entrypoint": "content-extractor extract",
+      "install": {
+        "method": "git-clone",
+        "python_deps": true,
+        "node_deps": false
+      },
+      "update": {
+        "method": "git-pull"
+      },
+      "dependencies": ["python3", "ffmpeg"],
+      "tags": ["extract", "transcription", "whisper", "ocr", "multimodal"],
+      "workflow_before": ["download"],
+      "workflow_after": ["rewrite", "intelligence"],
+      "status": "active"
+    },
+    "rewrite": {
+      "id": "rewrite",
+      "name": "Content Rewriter",
+      "kind": "first-party",
+      "repo": "zinan92/content-rewriter",
+      "primary_ref": "main",
+      "fallback_repo": null,
+      "fallback_ref": null,
+      "skill_path": "SKILL.md",
+      "entrypoint": "content-rewriter rewrite",
+      "install": {
+        "method": "git-clone",
+        "python_deps": true,
+        "node_deps": false
+      },
+      "update": {
+        "method": "git-pull"
+      },
+      "dependencies": ["python3"],
+      "tags": ["rewrite", "xiaohongshu", "wechat", "cross-platform"],
+      "workflow_before": ["extract"],
+      "workflow_after": [],
+      "status": "active"
+    },
+    "videocut": {
+      "id": "videocut",
+      "name": "Videocut",
+      "kind": "first-party",
+      "repo": "zinan92/videocut",
+      "primary_ref": "main",
+      "fallback_repo": null,
+      "fallback_ref": null,
+      "skill_path": "SKILL.md",
+      "entrypoint": "node cli.js",
+      "install": {
+        "method": "git-clone",
+        "python_deps": false,
+        "node_deps": false
+      },
+      "update": {
+        "method": "git-pull"
+      },
+      "dependencies": ["node", "ffmpeg", "whisper"],
+      "tags": ["video", "editing", "transcription", "subtitles", "autocut"],
+      "workflow_before": ["download"],
+      "workflow_after": [],
+      "subcommands": ["transcribe", "autocut", "subtitle", "hook", "clip", "cover", "speed", "pipeline"],
+      "status": "active"
+    },
+    "intelligence": {
+      "id": "intelligence",
+      "name": "Content Intelligence",
+      "kind": "first-party",
+      "repo": "zinan92/content-intelligence",
+      "primary_ref": "main",
+      "fallback_repo": null,
+      "fallback_ref": null,
+      "skill_path": "SKILL.md",
+      "entrypoint": "ci run",
+      "install": {
+        "method": "git-clone",
+        "python_deps": true,
+        "node_deps": false
+      },
+      "update": {
+        "method": "git-pull"
+      },
+      "dependencies": ["python3"],
+      "tags": ["intelligence", "trends", "analysis", "topics"],
+      "workflow_before": ["download"],
+      "workflow_after": [],
+      "status": "active",
+      "known_issues": ["pip install -e . fails due to src.cli module path in pyproject.toml"]
+    }
+  }
+}
