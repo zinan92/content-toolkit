@@ -29,9 +29,9 @@
       "entry": "node cli.js",
       "subcommands": ["transcribe", "autocut", "subtitle", "hook", "clip", "cover", "speed", "pipeline"]
     },
-    "intelligence": {
+    "analyze": {
       "repo": "zinan92/content-intelligence",
-      "description": "内容洞察引擎 (趋势检测/爆款归因/选题建议)",
+      "description": "内容分析与洞察 (趋势检测/爆款归因/选题建议)",
       "stage": 1,
       "requires": ["python3"],
       "entry": "python3 -m content_intelligence"
@@ -42,6 +42,13 @@
       "stage": 7,
       "requires": ["python3", "patchright"],
       "entry": "sau"
+    },
+    "xiaohongshu": {
+      "repo": "autoclaw-cc/xiaohongshu-skills",
+      "description": "小红书站内操作 (登录/搜索/互动/图文视频发布)",
+      "stage": 8,
+      "requires": ["python3"],
+      "entry": "python3 scripts/cli.py"
     }
   }
 }
