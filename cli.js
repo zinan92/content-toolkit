@@ -1,650 +1,27 @@
 #!/usr/bin/env node
-// cli.js — Unified entry: content <capability> [args]
+// cli.js — Registry-driven orchestrator CLI (v2)
+// Routes user commands to capabilities discovered via registry.v2.json.
 
-const { execFileSync, execFile } = require('node:child_process');
+const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
-const { loadRegistry, isInstalled, install, capabilityPath, update, remove } = require('./install');
-
-const CAPABILITY_ALIASES = {
-  xhs: 'xiaohongshu',
-  intelligence: 'analyze',
-};
-
-const PLATFORM_ALIASES = {
-  xhs: 'xiaohongshu',
-  wx: 'wechat',
-  weixin: 'wechat',
-  twitter: 'x',
-};
-
-const SUPPORTED_REWRITE_PLATFORMS = new Set([
-  'douyin',
-  'xiaohongshu',
-  'wechat',
-  'x',
-  'bilibili',
-  'kuaishou',
-  'tiktok',
-]);
-
-const REWRITE_PRESETS = {
-  'xiaohongshu-note': { to: 'xiaohongshu' },
-  'wechat-article': { to: 'wechat' },
-  'x-thread': { to: 'x' },
-};
-
-const SUPPORTED_VIDEOCUT_ACTIONS = new Set([
-  'transcribe',
-  'autocut',
-  'subtitle',
-  'hook',
-  'clip',
-  'cover',
-  'speed',
-  'pipeline',
-]);
-
-const VIDEOCUT_PRESETS = {
-  'short-form': 'autocut,speed,subtitle,hook,cover',
-  'subtitle-hook': 'subtitle,hook',
-  'repurpose-clips': 'autocut,subtitle,clip,cover',
-};
-
-const SUPPORTED_ANALYZE_MODES = new Set([
-  'extract',
-  'transcribe',
-  'trends',
-  'hooks',
-  'competitors',
-  'readiness',
-]);
-
-function normalizeCapabilityName(name) {
-  return CAPABILITY_ALIASES[name] || name;
-}
-
-function normalizePlatformName(name) {
-  return PLATFORM_ALIASES[name] || name;
-}
-
-function normalizePlatformCsv(value) {
-  if (!value) return value;
-  return value
-    .split(',')
-    .map((part) => normalizePlatformName(part.trim()))
-    .filter(Boolean)
-    .join(',');
-}
-
-function normalizeCapabilityArgs(name, args) {
-  if (name === 'publish' && args.length > 0) {
-    return [normalizePlatformName(args[0]), ...args.slice(1)];
-  }
-
-  if (name === 'rewrite') {
-    const normalizedArgs = [...args];
-    for (let i = 0; i < normalizedArgs.length; i += 1) {
-      if ((normalizedArgs[i] === '--from' || normalizedArgs[i] === '--to') && normalizedArgs[i + 1]) {
-        normalizedArgs[i + 1] = normalizePlatformCsv(normalizedArgs[i + 1]);
-      } else if (normalizedArgs[i].startsWith('--from=')) {
-        normalizedArgs[i] = `--from=${normalizePlatformCsv(normalizedArgs[i].slice('--from='.length))}`;
-      } else if (normalizedArgs[i].startsWith('--to=')) {
-        normalizedArgs[i] = `--to=${normalizePlatformCsv(normalizedArgs[i].slice('--to='.length))}`;
-      }
-    }
-    return normalizedArgs;
-  }
-
-  return args;
-}
-
-function getCapabilityUsageHint(name, args) {
-  if (name === 'download' && args.length === 0) {
-    return [
-      'download 需要一个可下载的目标。试试这些：',
-      '  content download <URL>',
-      '  content download https://douyin.com/video/xxx',
-      '  content download https://xiaohongshu.com/explore/xxx',
-      '  content download fetch-cookies',
-    ].join('\n');
-  }
-
-  if (name === 'extract' && args.length === 0) {
-    return [
-      'extract 需要一个内容目录。试试这些：',
-      '  content extract <内容目录>',
-      '  content extract ./output/douyin/user/video123/',
-    ].join('\n');
-  }
-
-  if (name === 'analyze' && args.length === 0) {
-    return [
-      'analyze 需要一个分析模式。试试这些：',
-      '  content analyze <模式>',
-      '  content analyze extract <内容目录>',
-      '  content analyze transcribe input.mp4',
-      '  content analyze trends',
-      '  content analyze hooks ./output/douyin/user/video123/',
-    ].join('\n');
-  }
-
-  if (name === 'rewrite' && args.length === 0) {
-    return [
-      'rewrite 需要输入内容和平台信息。试试这些：',
-      '  content rewrite <内容目录或文本文件> --from <来源> --to <目标>',
-      '  content rewrite preset xiaohongshu-note ./output/video123/ --from douyin',
-      '  content rewrite ./output/video123/ --from douyin --to xiaohongshu',
-    ].join('\n');
-  }
-
-  if (name === 'rewrite' && args[0] === 'preset' && args.length === 1) {
-    return [
-      'rewrite preset 需要一个预设名称。试试这些：',
-      '  content rewrite preset <预设> <内容目录或文本文件> --from <来源>',
-      '  content rewrite preset xiaohongshu-note ./output/video123/ --from douyin',
-      '  content rewrite preset wechat-article ./output/video123/ --from douyin',
-      '  content rewrite preset x-thread draft.md --from wechat',
-    ].join('\n');
-  }
-
-  if (name === 'videocut' && args.length === 0) {
-    return [
-      'videocut 需要子命令和视频文件。试试这些：',
-      '  content videocut <子命令> <视频文件>',
-      '  content videocut transcribe input.mp4',
-      '  content videocut preset short-form input.mp4 -o output/',
-      '  content videocut pipeline input.mp4 --steps autocut,subtitle',
-    ].join('\n');
-  }
-
-  if (name === 'videocut' && args[0] === 'preset' && args.length === 1) {
-    return [
-      'videocut preset 需要一个预设名称。试试这些：',
-      '  content videocut preset <预设> <视频文件> -o output/',
-      '  content videocut preset short-form input.mp4 -o output/',
-      '  content videocut preset subtitle-hook input.mp4 -o output/',
-      '  content videocut preset repurpose-clips input.mp4 -o output/',
-    ].join('\n');
-  }
-
-  if (name === 'publish' && args.length === 0) {
-    return [
-      'publish 需要更具体的目标。试试这些：',
-      '  content publish <平台子命令>',
-      '  content publish xiaohongshu upload-video --account creator --file demo.mp4 --title "标题" --desc "描述"',
-      '  content publish xiaohongshu upload-note --account creator --images 1.jpg 2.jpg --title "标题" --note "正文"',
-      '  content publish batch manifest.json --account creator --dry-run',
-    ].join('\n');
-  }
-
-  if (name === 'xiaohongshu' && args.length === 0) {
-    return [
-      'xiaohongshu 需要一个站内动作。试试这些：',
-      '  content xiaohongshu <子命令>',
-      '  content xiaohongshu check-login',
-      '  content xiaohongshu login',
-      '  content xiaohongshu search-feeds --keyword "露营"',
-      '  content xiaohongshu publish --title-file title.txt --content-file body.txt --images /abs/path/1.jpg',
-    ].join('\n');
-  }
-
-  return null;
-}
-
-function getFlagValue(args, flag) {
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === flag) {
-      return args[i + 1] && !args[i + 1].startsWith('-') ? args[i + 1] : null;
-    }
-    if (arg.startsWith(flag + '=')) {
-      return arg.slice(flag.length + 1) || null;
-    }
-  }
-  return null;
-}
-
-function getMultiFlagValues(args, flag) {
-  const values = [];
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === flag) {
-      let j = i + 1;
-      while (j < args.length && !args[j].startsWith('-')) {
-        values.push(args[j]);
-        j += 1;
-      }
-      return values;
-    }
-    if (arg.startsWith(flag + '=')) {
-      const value = arg.slice(flag.length + 1);
-      if (value) values.push(value);
-      return values;
-    }
-  }
-  return values;
-}
-
-function resolveInputPath(filePath, cwd) {
-  if (!filePath) return null;
-  return path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
-}
-
-function missingFlagMessage(flag, example) {
-  return `缺少 ${flag}。${example}`;
-}
-
-function fileNotFoundMessage(label, filePath) {
-  return `${label}文件不存在：${filePath}`;
-}
-
-function isLikelyUrl(value) {
-  return typeof value === 'string' && /^https?:\/\//.test(value);
-}
-
-function validatePublishArgs(args, cwd) {
-  const platform = normalizeCapabilityName(args[0]);
-  const action = args[1];
-  if (!platform || !action) {
-    return 'publish 需要平台和动作，例如：content publish xiaohongshu upload-video ...';
-  }
-
-  if (platform === 'batch') {
-    const manifest = args[1];
-    if (!manifest) {
-      return 'publish batch 需要 manifest 文件，例如：content publish batch manifest.json --account creator --dry-run';
-    }
-    const resolvedManifest = resolveInputPath(manifest, cwd);
-    if (!fs.existsSync(resolvedManifest)) {
-      return fileNotFoundMessage('manifest', resolvedManifest);
-    }
-    if (!getFlagValue(args, '--account')) {
-      return missingFlagMessage('--account', '批量发布需要指定账号。');
-    }
-    return null;
-  }
-
-  if (action === 'upload-video') {
-    const account = getFlagValue(args, '--account');
-    if (!account) {
-      return missingFlagMessage('--account', '先指定要用哪个账号发布。');
-    }
-    const file = getFlagValue(args, '--file');
-    if (!file) {
-      return missingFlagMessage('--file', '视频发布至少要给一个本地视频文件。');
-    }
-    const resolvedFile = resolveInputPath(file, cwd);
-    if (!fs.existsSync(resolvedFile)) {
-      return fileNotFoundMessage('视频', resolvedFile);
-    }
-    if (!getFlagValue(args, '--title')) {
-      return missingFlagMessage('--title', '视频发布需要标题。');
-    }
-    if (!getFlagValue(args, '--desc')) {
-      return missingFlagMessage('--desc', '视频发布需要描述文案。');
-    }
-  }
-
-  if (action === 'upload-note') {
-    const account = getFlagValue(args, '--account');
-    if (!account) {
-      return missingFlagMessage('--account', '先指定要用哪个账号发布。');
-    }
-    const images = getMultiFlagValues(args, '--images');
-    if (images.length === 0) {
-      return missingFlagMessage('--images', '图文发布至少要给一张图片。');
-    }
-    for (const image of images) {
-      const resolvedImage = resolveInputPath(image, cwd);
-      if (!fs.existsSync(resolvedImage)) {
-        return fileNotFoundMessage('图片', resolvedImage);
-      }
-    }
-    if (!getFlagValue(args, '--title')) {
-      return missingFlagMessage('--title', '图文发布需要标题。');
-    }
-    if (!getFlagValue(args, '--note')) {
-      return missingFlagMessage('--note', '图文发布需要正文。');
-    }
-  }
-
-  return null;
-}
-
-function validateDownloadArgs(args) {
-  const input = args[0];
-  if (!input) {
-    return '缺少可下载的 URL。试试：content download <URL>';
-  }
-  if (input === 'fetch-cookies') {
-    return null;
-  }
-  if (!isLikelyUrl(input)) {
-    return '下载需要一个 URL，或者使用 content download fetch-cookies 获取 cookies。';
-  }
-  return null;
-}
-
-function validateExtractArgs(args, cwd) {
-  const input = args[0];
-  if (!input) {
-    return '缺少内容目录。试试：content extract <内容目录>';
-  }
-  const resolvedInput = resolveInputPath(input, cwd);
-  if (!fs.existsSync(resolvedInput)) {
-    return fileNotFoundMessage('内容目录', resolvedInput);
-  }
-  if (!fs.statSync(resolvedInput).isDirectory()) {
-    return `extract 需要目录，不接受单个文件：${resolvedInput}`;
-  }
-  return null;
-}
-
-function validateRewriteArgs(args, cwd) {
-  if (args[0] === 'preset') {
-    const presetName = args[1];
-    if (!presetName) {
-      return '缺少 rewrite preset 名称。试试：content rewrite preset xiaohongshu-note <内容目录或文本文件> --from douyin';
-    }
-    if (!REWRITE_PRESETS[presetName]) {
-      return `不支持的 rewrite preset：${presetName}。可用 preset：${Object.keys(REWRITE_PRESETS).join('、')}`;
-    }
-    const presetArgs = [...args.slice(2), '--to', REWRITE_PRESETS[presetName].to];
-    return validateRewriteArgs(presetArgs, cwd);
-  }
-
-  const input = args[0];
-  if (!input) {
-    return '缺少输入内容。试试：content rewrite <内容目录或文本文件> --from douyin --to xiaohongshu';
-  }
-  const resolvedInput = resolveInputPath(input, cwd);
-  if (!fs.existsSync(resolvedInput)) {
-    return fileNotFoundMessage('输入', resolvedInput);
-  }
-  if (!getFlagValue(args, '--from')) {
-    return missingFlagMessage('--from', '改写前要说明来源平台。');
-  }
-  if (!getFlagValue(args, '--to')) {
-    return missingFlagMessage('--to', '改写前要说明目标平台。');
-  }
-  const sourcePlatform = normalizePlatformCsv(getFlagValue(args, '--from'));
-  if (!SUPPORTED_REWRITE_PLATFORMS.has(sourcePlatform)) {
-    return `不支持的来源平台：${sourcePlatform}。可用平台：${Array.from(SUPPORTED_REWRITE_PLATFORMS).join('、')}`;
-  }
-  const targetPlatforms = normalizePlatformCsv(getFlagValue(args, '--to')).split(',');
-  const unsupportedTarget = targetPlatforms.find((platform) => !SUPPORTED_REWRITE_PLATFORMS.has(platform));
-  if (unsupportedTarget) {
-    return `不支持的目标平台：${unsupportedTarget}。可用平台：${Array.from(SUPPORTED_REWRITE_PLATFORMS).join('、')}`;
-  }
-  return null;
-}
-
-function validateVideocutArgs(args, cwd) {
-  const action = args[0];
-  if (!action) {
-    return '缺少 videocut 子命令。试试：content videocut transcribe input.mp4';
-  }
-
-  if (action === 'preset') {
-    const presetName = args[1];
-    if (!presetName) {
-      return '缺少 videocut preset 名称。试试：content videocut preset short-form input.mp4 -o output/';
-    }
-    if (!VIDEOCUT_PRESETS[presetName]) {
-      return `不支持的 videocut preset：${presetName}。可用 preset：${Object.keys(VIDEOCUT_PRESETS).join('、')}`;
-    }
-    const input = args[2];
-    if (!input || input.startsWith('-')) {
-      return '缺少视频文件。请在 videocut preset 后提供本地视频路径。';
-    }
-    const resolvedInput = resolveInputPath(input, cwd);
-    if (!fs.existsSync(resolvedInput)) {
-      return fileNotFoundMessage('视频', resolvedInput);
-    }
-    return null;
-  }
-
-  if (!SUPPORTED_VIDEOCUT_ACTIONS.has(action)) {
-    return `不支持的 videocut 子命令：${action}。可用子命令：${Array.from(SUPPORTED_VIDEOCUT_ACTIONS).join('、')}`;
-  }
-
-  if (SUPPORTED_VIDEOCUT_ACTIONS.has(action)) {
-    const input = args[1];
-    if (!input || input.startsWith('-')) {
-      return '缺少视频文件。请在子命令后提供本地视频路径。';
-    }
-    const resolvedInput = resolveInputPath(input, cwd);
-    if (!fs.existsSync(resolvedInput)) {
-      return fileNotFoundMessage('视频', resolvedInput);
-    }
-  }
-
-  if (action === 'pipeline' && !getFlagValue(args, '--steps')) {
-    return missingFlagMessage('--steps', 'pipeline 需要指定步骤列表。');
-  }
-
-  return null;
-}
-
-function validateXiaohongshuArgs(args, cwd) {
-  const action = args[0];
-  if (!action) {
-    return 'xiaohongshu 需要一个站内动作，例如：content xiaohongshu search-feeds --keyword "露营"';
-  }
-
-  if (action === 'search-feeds' && !getFlagValue(args, '--keyword')) {
-    return missingFlagMessage('--keyword', '搜索笔记时必须提供关键词。');
-  }
-
-  if (['get-feed-detail', 'like-feed', 'favorite-feed'].includes(action)) {
-    if (!getFlagValue(args, '--feed-id')) {
-      return missingFlagMessage('--feed-id', '这个动作需要 feed id。');
-    }
-    if (!getFlagValue(args, '--xsec-token')) {
-      return missingFlagMessage('--xsec-token', '这个动作需要 xsec token。');
-    }
-  }
-
-  if (action === 'post-comment') {
-    if (!getFlagValue(args, '--feed-id')) {
-      return missingFlagMessage('--feed-id', '评论时需要 feed id。');
-    }
-    if (!getFlagValue(args, '--xsec-token')) {
-      return missingFlagMessage('--xsec-token', '评论时需要 xsec token。');
-    }
-    if (!getFlagValue(args, '--content')) {
-      return missingFlagMessage('--content', '评论时需要评论正文。');
-    }
-  }
-
-  if (action === 'publish') {
-    const titleFile = getFlagValue(args, '--title-file');
-    if (!titleFile) {
-      return missingFlagMessage('--title-file', '图文发布需要标题文件。');
-    }
-    const resolvedTitle = resolveInputPath(titleFile, cwd);
-    if (!fs.existsSync(resolvedTitle)) {
-      return fileNotFoundMessage('标题', resolvedTitle);
-    }
-
-    const contentFile = getFlagValue(args, '--content-file');
-    if (!contentFile) {
-      return missingFlagMessage('--content-file', '图文发布需要正文文件。');
-    }
-    const resolvedContent = resolveInputPath(contentFile, cwd);
-    if (!fs.existsSync(resolvedContent)) {
-      return fileNotFoundMessage('正文', resolvedContent);
-    }
-
-    const images = getMultiFlagValues(args, '--images');
-    if (images.length === 0) {
-      return missingFlagMessage('--images', '图文发布至少要给一张图片。');
-    }
-    for (const image of images) {
-      const resolvedImage = resolveInputPath(image, cwd);
-      if (!fs.existsSync(resolvedImage)) {
-        return fileNotFoundMessage('图片', resolvedImage);
-      }
-    }
-  }
-
-  if (action === 'publish-video') {
-    const titleFile = getFlagValue(args, '--title-file');
-    if (!titleFile) {
-      return missingFlagMessage('--title-file', '视频发布需要标题文件。');
-    }
-    const resolvedTitle = resolveInputPath(titleFile, cwd);
-    if (!fs.existsSync(resolvedTitle)) {
-      return fileNotFoundMessage('标题', resolvedTitle);
-    }
-
-    const contentFile = getFlagValue(args, '--content-file');
-    if (!contentFile) {
-      return missingFlagMessage('--content-file', '视频发布需要正文文件。');
-    }
-    const resolvedContent = resolveInputPath(contentFile, cwd);
-    if (!fs.existsSync(resolvedContent)) {
-      return fileNotFoundMessage('正文', resolvedContent);
-    }
-
-    const video = getFlagValue(args, '--video');
-    if (!video) {
-      return missingFlagMessage('--video', '视频发布需要本地视频文件。');
-    }
-    const resolvedVideo = resolveInputPath(video, cwd);
-    if (!fs.existsSync(resolvedVideo)) {
-      return fileNotFoundMessage('视频', resolvedVideo);
-    }
-  }
-
-  return null;
-}
-
-function validateAnalyzeArgs(args, cwd) {
-  const mode = args[0];
-  if (!mode) {
-    return '缺少分析模式。试试：content analyze <模式>';
-  }
-
-  if (!SUPPORTED_ANALYZE_MODES.has(mode)) {
-    return `不支持的 analyze 模式：${mode}。可用模式：${Array.from(SUPPORTED_ANALYZE_MODES).join('、')}`;
-  }
-
-  if (mode === 'trends') {
-    return null;
-  }
-
-  if (mode === 'transcribe') {
-    const input = args[1];
-    if (!input || input.startsWith('-')) {
-      return '缺少视频文件。请在 analyze transcribe 后提供本地视频路径。';
-    }
-    const resolvedInput = resolveInputPath(input, cwd);
-    if (!fs.existsSync(resolvedInput)) {
-      return fileNotFoundMessage('视频', resolvedInput);
-    }
-    if (fs.statSync(resolvedInput).isDirectory()) {
-      return `analyze transcribe 需要视频文件，不接受目录：${resolvedInput}`;
-    }
-    return null;
-  }
-
-  const input = args[1];
-  if (!input || input.startsWith('-')) {
-    return '缺少内容目录。试试：content analyze extract <内容目录>';
-  }
-  const resolvedInput = resolveInputPath(input, cwd);
-  if (!fs.existsSync(resolvedInput)) {
-    return fileNotFoundMessage('内容目录', resolvedInput);
-  }
-  if (!fs.statSync(resolvedInput).isDirectory()) {
-    return `analyze ${mode} 需要目录，不接受单个文件：${resolvedInput}`;
-  }
-  return null;
-}
-
-function validateCapabilityArgs(name, args, cwd = process.cwd()) {
-  if (name === 'download') {
-    return validateDownloadArgs(args, cwd);
-  }
-
-  if (name === 'analyze') {
-    return validateAnalyzeArgs(args, cwd);
-  }
-
-  if (name === 'extract') {
-    return validateExtractArgs(args, cwd);
-  }
-
-  if (name === 'rewrite') {
-    return validateRewriteArgs(args, cwd);
-  }
-
-  if (name === 'videocut') {
-    return validateVideocutArgs(args, cwd);
-  }
-
-  if (name === 'publish') {
-    return validatePublishArgs(args, cwd);
-  }
-
-  if (name === 'xiaohongshu') {
-    return validateXiaohongshuArgs(args, cwd);
-  }
-
-  return null;
-}
-
-function buildCommandPlan(name, args) {
-  if (name === 'rewrite' && args[0] === 'preset') {
-    const preset = REWRITE_PRESETS[args[1]];
-    if (preset) {
-      return {
-        rerouteToSelf: 'rewrite',
-        args: [...args.slice(2), '--to', preset.to],
-      };
-    }
-  }
-
-  if (name === 'videocut' && args[0] === 'preset') {
-    const steps = VIDEOCUT_PRESETS[args[1]];
-    if (steps) {
-      return {
-        rerouteToSelf: 'videocut',
-        args: ['pipeline', args[2], '--steps', steps, ...args.slice(3)],
-      };
-    }
-  }
-
-  if (name === 'analyze' && args[0] === 'extract') {
-    return {
-      routeTo: 'extract',
-      args: args.slice(1),
-    };
-  }
-
-  if (name === 'analyze' && args[0] === 'transcribe') {
-    return {
-      routeTo: 'videocut',
-      args: ['transcribe', ...args.slice(1)],
-    };
-  }
-
-  if (name === 'publish' && args[0] === 'batch') {
-    return {
-      executable: 'python3',
-      args: [path.join(__dirname, 'scripts', 'batch-publish.py'), ...args.slice(1)],
-      cwd: __dirname,
-    };
-  }
-
-  return null;
-}
+const {
+  loadRegistry, getCapability, isInstalled, install, capabilityPath,
+  update, remove, checkHealth, readMeta, HEALTH,
+} = require('./install');
+
+// --- Help ---
 
 function showHelp() {
   const registry = loadRegistry();
-  const sorted = Object.entries(registry).sort((a, b) => a[1].stage - b[1].stage);
+  const caps = Object.values(registry);
+
+  // Sort by workflow position: no predecessors first
+  const sorted = caps.sort((a, b) => {
+    const aDepth = (a.workflow_before || []).length;
+    const bDepth = (b.workflow_before || []).length;
+    return aDepth - bDepth;
+  });
 
   console.log(`
 content-toolkit — AI 内容生产工具箱
@@ -668,20 +45,10 @@ content-toolkit — AI 内容生产工具箱
       如果你只有一个视频文件想转文字，用:
       content videocut transcribe my-video.mp4
 
-分析趋势/内容判断      content analyze <模式>
-  从目录提取文字        content analyze extract ./output/douyin/user/video123/
-  单视频转录            content analyze transcribe input.mp4
-  看趋势/选题           content analyze trends
-  看 hook/结构          content analyze hooks ./output/douyin/user/video123/
-
-  ⚠️  analyze 是统一分析入口
-      content intelligence 仍可用，但现在是兼容别名
-
 改写成其他平台        content rewrite <内容目录> --from <来源> --to <目标>
   抖音→小红书           content rewrite ./output/video123/ --from douyin --to xiaohongshu
   抖音→公众号           content rewrite ./output/video123/ --from douyin --to wechat
   抖音→两个平台         content rewrite ./output/video123/ --from douyin --to xiaohongshu,wechat
-  小红书笔记预设         content rewrite preset xiaohongshu-note ./output/video123/ --from douyin
 
   ⚠️  rewrite 需要先跑过 extract（自动生成 extractor_output.json）
   ⚠️  也支持直接传 .md/.txt 文件
@@ -694,119 +61,129 @@ content-toolkit — AI 内容生产工具箱
   拆成多个短视频        content videocut clip input.mp4 -o output/
   生成封面/金句卡        content videocut cover input.mp4 --text "你的金句"
   加速(1.0-1.2x)       content videocut speed input.mp4 --rate 1.2 -o output/
-  短视频预设            content videocut preset short-form input.mp4 -o output/
   一条龙处理            content videocut pipeline input.mp4 --steps autocut,subtitle -o output/
 
-小红书原生操作         content xiaohongshu <子命令>
-  检查登录状态          content xiaohongshu check-login
-  登录小红书            content xiaohongshu login
-  搜索笔记              content xiaohongshu search-feeds --keyword "露营"
-  发布图文              content xiaohongshu publish --title-file title.txt --content-file body.txt --images /abs/path/1.jpg
-  发布视频              content xiaohongshu publish-video --title-file title.txt --content-file body.txt --video /abs/path/demo.mp4
-
-多平台发布             content publish <平台子命令>
-  小红书发布视频         content publish xiaohongshu upload-video --account creator --file demo.mp4 --title "标题" --desc "描述"
-  小红书发布图文         content publish xiaohongshu upload-note --account creator --images 1.jpg 2.jpg --title "标题" --note "正文"
-  批量定时发布           content publish batch manifest.json --account creator --dry-run
+内容洞察              content intelligence <数据目录>
+  分析趋势/选题         content intelligence ./xhs-data/ ./douyin-data/
 
 ─────────────────────────────────────────────────────────────────
 典型工作流:
   1. 下载  content download https://douyin.com/video/xxx --cookies cookies.json
-  2. 分析  content analyze extract ./output/douyin/user/video123/
+  2. 提取  content extract ./output/douyin/user/video123/
   3. 改写  content rewrite ./output/douyin/user/video123/ --from douyin --to xiaohongshu
-  4. 发布  content publish xiaohongshu upload-video --account creator --file video.mp4 --title "标题" --desc "描述"
+
+工作流 (一键完成):
+  content workflow douyin-to-xhs <URL>  抖音视频 → 小红书图文笔记
+    content workflow douyin-to-xhs https://douyin.com/video/xxx -o output/
 
 管理:
   content list              查看所有能力及安装状态
   content install <name>    预装一个能力（否则首次使用时自动安装）
   content update <name>     更新已安装的能力
   content remove <name>     删除已安装的能力
+  content health            查看所有能力的健康状态
 `);
 
-  console.log('已安装的能力:');
-  for (const [name, cap] of sorted) {
-    const installed = isInstalled(name);
-    const status = installed ? '✓' : '·';
-    console.log(`  ${status} ${name.padEnd(14)} ${cap.description}`);
+  console.log('能力状态:');
+  for (const cap of sorted) {
+    const health = checkHealth(cap.id);
+    const meta = readMeta(cap.id);
+    const icon = health === HEALTH.INSTALLED ? '✓'
+      : health === HEALTH.DEGRADED ? '⚠'
+      : health === HEALTH.UNAVAILABLE ? '✗'
+      : '·';
+    const ref = meta ? ` (${meta.installed_ref})` : '';
+    console.log(`  ${icon} ${cap.id.padEnd(14)} ${cap.name}${ref}`);
   }
 }
 
-function showList(onlyInstalled) {
+// --- List ---
+
+function showList() {
   const registry = loadRegistry();
-  const sorted = Object.entries(registry).sort((a, b) => a[1].stage - b[1].stage);
-
-  for (const [name, cap] of sorted) {
-    const installed = isInstalled(name);
-    if (onlyInstalled && !installed) continue;
-    const status = installed ? 'installed' : 'not installed';
-    console.log(`  ${name.padEnd(14)} [${status}]  ${cap.description}`);
+  for (const cap of Object.values(registry)) {
+    const health = checkHealth(cap.id);
+    const meta = readMeta(cap.id);
+    const ref = meta ? ` @ ${meta.installed_ref}` : '';
+    const issues = (cap.known_issues || []).length > 0 ? ` [${cap.known_issues.length} known issue(s)]` : '';
+    console.log(`  ${cap.id.padEnd(14)} [${health}${ref}]  ${cap.name}${issues}`);
   }
 }
+
+// --- Health ---
+
+function showHealth() {
+  const registry = loadRegistry();
+  console.log('\nCapability Health Report\n');
+
+  for (const cap of Object.values(registry)) {
+    const health = checkHealth(cap.id);
+    const meta = readMeta(cap.id);
+    const icon = health === HEALTH.INSTALLED ? '✓'
+      : health === HEALTH.DEGRADED ? '⚠'
+      : health === HEALTH.UNAVAILABLE ? '✗'
+      : '·';
+
+    console.log(`${icon} ${cap.id}`);
+    console.log(`  name:    ${cap.name}`);
+    console.log(`  kind:    ${cap.kind}`);
+    console.log(`  repo:    ${cap.repo}`);
+    console.log(`  ref:     ${cap.primary_ref}`);
+    if (cap.trust) console.log(`  trust:   ${cap.trust}`);
+    if (cap.fallback_repo) console.log(`  fallback: ${cap.fallback_repo}@${cap.fallback_ref || 'main'}`);
+    console.log(`  health:  ${health}`);
+
+    if (meta) {
+      console.log(`  installed_ref: ${meta.installed_ref}`);
+      console.log(`  installed_at:  ${meta.installed_at}`);
+      console.log(`  source:        ${meta.source}`);
+    }
+
+    if (cap.known_issues) {
+      for (const issue of cap.known_issues) {
+        console.log(`  ⚠ issue: ${issue}`);
+      }
+    }
+
+    // Check deps
+    const missing = [];
+    for (const dep of cap.dependencies || []) {
+      try { execFileSync('which', [dep], { stdio: 'pipe' }); } catch { missing.push(dep); }
+    }
+    if (missing.length > 0) {
+      console.log(`  ✗ missing deps: ${missing.join(', ')}`);
+    }
+
+    console.log('');
+  }
+}
+
+// --- Run capability ---
 
 function runCapability(name, args) {
-  const normalizedName = normalizeCapabilityName(name);
-  const normalizedArgs = normalizeCapabilityArgs(normalizedName, args);
-  const commandPlan = buildCommandPlan(normalizedName, normalizedArgs);
-  const registry = loadRegistry();
-  const cap = registry[normalizedName];
-  if (!cap) {
-    // Check if user passed a URL directly (common mistake)
-    if (name.startsWith('http://') || name.startsWith('https://')) {
-      console.error(`看起来你想下载内容？试试:\n  content download ${name}\n`);
-    } else if (name.endsWith('.mp4') || name.endsWith('.mov') || name.endsWith('.mp3')) {
-      console.error(`看起来你想处理一个视频/音频文件？试试:\n  content videocut transcribe ${name}   # 转文字\n  content videocut autocut ${name}     # 去废话\n  content videocut subtitle ${name}    # 加字幕\n`);
-    } else {
-      console.error(`未知命令: "${name}"\n运行 content 查看所有可用命令。可用主能力包括 download、extract、analyze、rewrite、videocut、publish、xiaohongshu。`);
-    }
-    process.exit(1);
-  }
+  const cap = getCapability(name);
 
-  const usageHint = getCapabilityUsageHint(normalizedName, normalizedArgs);
-  if (usageHint) {
-    console.error(usageHint);
+  // Capabilities without an entrypoint can't be run directly
+  if (!cap.entrypoint) {
+    console.error(`"${name}" is a reference capability (no CLI entrypoint).`);
+    console.error(`It is used as a dependency by other capabilities, not invoked directly.`);
     process.exit(1);
-  }
-
-  const validationError = validateCapabilityArgs(normalizedName, normalizedArgs, process.cwd());
-  if (validationError) {
-    console.error(validationError);
-    process.exit(1);
-  }
-
-  if (commandPlan) {
-    if (commandPlan.rerouteToSelf) {
-      runCapability(commandPlan.rerouteToSelf, commandPlan.args);
-      return;
-    }
-    if (commandPlan.routeTo) {
-      runCapability(commandPlan.routeTo, commandPlan.args);
-      return;
-    }
-    try {
-      execFileSync(commandPlan.executable, commandPlan.args, { cwd: commandPlan.cwd, stdio: 'inherit' });
-    } catch (err) {
-      process.exit(err.status || 1);
-    }
-    return;
   }
 
   // Auto-install on first use
-  const capDir = install(normalizedName);
+  const capDir = install(name);
 
   // Build the command
-  const [cmd, ...baseArgs] = cap.entry.split(' ');
+  const [cmd, ...baseArgs] = cap.entrypoint.split(' ');
 
-  // Resolve relative paths in user args to absolute before changing cwd to capDir.
-  // This covers -o/--output-dir values, --cookies paths, and positional input paths.
+  // Resolve relative paths in user args to absolute before changing cwd
   const userCwd = process.cwd();
   const PATH_FLAGS = new Set(['-o', '--output-dir', '--cookies', '--style-dir', '--feedback-dir', '--output']);
-  const resolvedUserArgs = normalizedArgs.map((arg, i) => {
-    const prev = normalizedArgs[i - 1];
-    // Value after a path flag (space-separated: -o foo)
+  const resolvedUserArgs = args.map((arg, i) => {
+    const prev = args[i - 1];
     if (prev && PATH_FLAGS.has(prev) && arg && !path.isAbsolute(arg)) {
       return path.resolve(userCwd, arg);
     }
-    // Equals-style path flag (--output-dir=foo)
     for (const flag of PATH_FLAGS) {
       if (arg.startsWith(flag + '=')) {
         const val = arg.slice(flag.length + 1);
@@ -815,7 +192,6 @@ function runCapability(name, args) {
         }
       }
     }
-    // Positional arg that looks like a path (contains / or . but not a flag)
     if (!arg.startsWith('-') && (arg.includes('/') || arg.includes('.')) && !arg.startsWith('http')) {
       const resolved = path.resolve(userCwd, arg);
       if (fs.existsSync(resolved)) {
@@ -830,21 +206,14 @@ function runCapability(name, args) {
   // Resolve the executable
   let executable = cmd;
   if (cmd === 'python3') {
-    // python3 -m module: use venv python if available
     const venvPython = path.join(capDir, '.venv', 'bin', 'python3');
-    if (fs.existsSync(venvPython)) {
-      executable = venvPython;
-    }
+    if (fs.existsSync(venvPython)) executable = venvPython;
   } else if (cmd !== 'node') {
-    // Check if it's a CLI command installed in venv/bin
     const venvBin = path.join(capDir, '.venv', 'bin', cmd);
-    if (fs.existsSync(venvBin)) {
-      executable = venvBin;
-    }
+    if (fs.existsSync(venvBin)) executable = venvBin;
   }
 
   if (cmd === 'node') {
-    // Node projects: resolve entry script relative to capability dir
     const nodeArgs = fullArgs.map((a, i) => {
       if (i === 0 && !a.startsWith('/') && !a.startsWith('-')) {
         return path.join(capDir, a);
@@ -866,9 +235,11 @@ function runCapability(name, args) {
   }
 }
 
+// --- Main ---
+
 function main() {
   const args = process.argv.slice(2);
-  const command = normalizeCapabilityName(args[0]);
+  const command = args[0];
 
   if (!command || command === 'help' || command === '--help') {
     showHelp();
@@ -876,46 +247,57 @@ function main() {
   }
 
   if (command === 'list') {
-    showList(args.includes('--installed'));
+    showList();
+    return;
+  }
+
+  if (command === 'health') {
+    showHealth();
     return;
   }
 
   if (command === 'install') {
-    const name = normalizeCapabilityName(args[1]);
+    const name = args[1];
     if (!name) { console.error('Usage: content install <capability>'); process.exit(1); }
     install(name);
     return;
   }
 
   if (command === 'update') {
-    const name = normalizeCapabilityName(args[1]);
+    const name = args[1];
     if (!name) { console.error('Usage: content update <capability>'); process.exit(1); }
     update(name);
     return;
   }
 
   if (command === 'remove') {
-    const name = normalizeCapabilityName(args[1]);
+    const name = args[1];
     if (!name) { console.error('Usage: content remove <capability>'); process.exit(1); }
     remove(name);
     return;
   }
 
+  if (command === 'workflow') {
+    const { runWorkflow } = require('./workflows');
+    runWorkflow(args.slice(1));
+    return;
+  }
+
   // Route to capability
+  const registry = loadRegistry();
+  if (!registry[command]) {
+    // Helpful error messages for common mistakes
+    if (command.startsWith('http://') || command.startsWith('https://')) {
+      console.error(`看起来你想下载内容？试试:\n  content download ${command}\n`);
+    } else if (command.endsWith('.mp4') || command.endsWith('.mov') || command.endsWith('.mp3')) {
+      console.error(`看起来你想处理一个视频/音频文件？试试:\n  content videocut transcribe ${command}   # 转文字\n  content videocut autocut ${command}     # 去废话\n  content videocut subtitle ${command}    # 加字幕\n`);
+    } else {
+      console.error(`未知命令: "${command}"\n运行 content 查看所有可用命令。`);
+    }
+    process.exit(1);
+  }
+
   runCapability(command, args.slice(1));
 }
 
-if (require.main === module) {
-  main();
-}
-
-module.exports = {
-  buildCommandPlan,
-  getCapabilityUsageHint,
-  normalizeCapabilityName,
-  normalizeCapabilityArgs,
-  validateCapabilityArgs,
-  runCapability,
-  showHelp,
-  showList,
-};
+main();
