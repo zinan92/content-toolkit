@@ -122,6 +122,58 @@
       "workflow_after": [],
       "status": "active",
       "known_issues": ["pip install -e . fails due to src.cli module path in pyproject.toml"]
+    },
+    "publish": {
+      "id": "publish",
+      "name": "Social Auto Upload",
+      "kind": "external",
+      "repo": "dreammis/social-auto-upload",
+      "primary_ref": "main",
+      "fallback_repo": null,
+      "fallback_ref": null,
+      "skill_path": null,
+      "entrypoint": "python3 upload.py",
+      "install": {
+        "method": "git-clone",
+        "python_deps": true,
+        "node_deps": false
+      },
+      "update": {
+        "method": "git-pull"
+      },
+      "dependencies": ["python3"],
+      "tags": ["publish", "upload", "douyin", "xiaohongshu", "bilibili", "kuaishou"],
+      "workflow_before": ["rewrite", "videocut"],
+      "workflow_after": [],
+      "status": "active",
+      "trust": "external-unverified",
+      "notes": "Upstream repo — no fork mirror yet. Fallback recommended per policy once publish workflow is critical."
+    },
+    "xiaohongshu-skills": {
+      "id": "xiaohongshu-skills",
+      "name": "Xiaohongshu Skills",
+      "kind": "external",
+      "repo": "autoclaw-cc/xiaohongshu-skills",
+      "primary_ref": "main",
+      "fallback_repo": null,
+      "fallback_ref": null,
+      "skill_path": null,
+      "entrypoint": null,
+      "install": {
+        "method": "git-clone",
+        "python_deps": false,
+        "node_deps": false
+      },
+      "update": {
+        "method": "git-pull"
+      },
+      "dependencies": [],
+      "tags": ["xiaohongshu", "skills", "automation"],
+      "workflow_before": [],
+      "workflow_after": [],
+      "status": "active",
+      "trust": "external-unverified",
+      "notes": "Skill-only capability (no CLI entrypoint). Used as reference/dependency by other capabilities, not directly invoked."
     }
   }
 }

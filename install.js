@@ -128,6 +128,54 @@ function checkDependencies(deps) {
   return missing;
 }
 
+// --- Source resolution (pointer + fallback) ---
+
+function cloneRepo(repo, ref, dest) {
+  const repoUrl = `https://github.com/${repo}.git`;
+  const cloneArgs = ['clone', '--depth', '1'];
+  if (ref && ref !== 'main' && ref !== 'master') {
+    cloneArgs.push('--branch', ref);
+  }
+  cloneArgs.push(repoUrl, dest);
+  execFileSync('git', cloneArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
+}
+
+function resolveSource(cap, dest) {
+  const primaryRepo = cap.repo;
+  const primaryRef = cap.primary_ref || 'main';
+
+  // Step 1: Try primary repo
+  try {
+    console.log(`  Installing ${cap.id} from ${primaryRepo}@${primaryRef}...`);
+    cloneRepo(primaryRepo, primaryRef, dest);
+    return { source: 'primary', ref: primaryRef };
+  } catch (err) {
+    console.error(`  ⚠ Primary source failed: ${primaryRepo}`);
+  }
+
+  // Step 2: Try fallback repo (if configured)
+  if (cap.fallback_repo) {
+    const fallbackRef = cap.fallback_ref || 'main';
+    try {
+      console.log(`  Trying fallback: ${cap.fallback_repo}@${fallbackRef}...`);
+      cloneRepo(cap.fallback_repo, fallbackRef, dest);
+      console.log(`  ⚠ Installed from fallback source`);
+      return { source: 'fallback', ref: fallbackRef };
+    } catch {
+      console.error(`  ⚠ Fallback source also failed: ${cap.fallback_repo}`);
+    }
+  }
+
+  // Step 3: Use local cache if it exists (from a previous install)
+  if (fs.existsSync(dest)) {
+    console.log(`  ⚠ Using cached local copy (may be stale)`);
+    return { source: 'cache', ref: 'cached' };
+  }
+
+  // All sources exhausted
+  return { source: 'none', ref: null };
+}
+
 // --- Install ---
 
 function install(name) {
@@ -144,20 +192,16 @@ function install(name) {
     throw new Error(`Missing dependencies: ${missing.join(', ')}`);
   }
 
-  // Clone
+  // Clone with fallback resolution
   fs.mkdirSync(CAPS_DIR, { recursive: true });
   const dest = capabilityPath(name);
-  const repoUrl = `https://github.com/${cap.repo}.git`;
-  const ref = cap.primary_ref || 'main';
+  const { source: resolvedSource, ref: resolvedRef } = resolveSource(cap, dest);
 
-  console.log(`  Installing ${name} from ${cap.repo}@${ref}...`);
-  const cloneArgs = ['clone', '--depth', '1'];
-  if (ref !== 'main' && ref !== 'master') {
-    cloneArgs.push('--branch', ref);
+  if (!fs.existsSync(dest)) {
+    throw new Error(`Failed to install ${name}: all sources exhausted.`);
   }
-  cloneArgs.push(repoUrl, dest);
 
-  execFileSync('git', cloneArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
+  console.log(`  Source: ${resolvedSource}`);
 
   // Post-install setup
   const setupScript = path.join(dest, 'setup.sh');
@@ -209,7 +253,7 @@ function install(name) {
   writeMeta(name, {
     installed_ref: installedRef,
     installed_at: new Date().toISOString(),
-    source: 'primary',
+    source: resolvedSource,
     health,
     last_verified: new Date().toISOString(),
   });
