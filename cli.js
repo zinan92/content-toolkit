@@ -8,6 +8,7 @@ const { loadRegistry, isInstalled, install, capabilityPath, update, remove } = r
 
 const CAPABILITY_ALIASES = {
   xhs: 'xiaohongshu',
+  intelligence: 'analyze',
 };
 
 function normalizeCapabilityName(name) {
@@ -30,6 +31,17 @@ function getCapabilityUsageHint(name, args) {
       'extract 需要一个内容目录。试试这些：',
       '  content extract <内容目录>',
       '  content extract ./output/douyin/user/video123/',
+    ].join('\n');
+  }
+
+  if (name === 'analyze' && args.length === 0) {
+    return [
+      'analyze 需要一个分析模式。试试这些：',
+      '  content analyze <模式>',
+      '  content analyze extract <内容目录>',
+      '  content analyze transcribe input.mp4',
+      '  content analyze trends',
+      '  content analyze hooks ./output/douyin/user/video123/',
     ].join('\n');
   }
 
@@ -389,6 +401,20 @@ function validateCapabilityArgs(name, args, cwd = process.cwd()) {
 }
 
 function buildCommandPlan(name, args) {
+  if (name === 'analyze' && args[0] === 'extract') {
+    return {
+      routeTo: 'extract',
+      args: args.slice(1),
+    };
+  }
+
+  if (name === 'analyze' && args[0] === 'transcribe') {
+    return {
+      routeTo: 'videocut',
+      args: ['transcribe', ...args.slice(1)],
+    };
+  }
+
   if (name === 'publish' && args[0] === 'batch') {
     return {
       executable: 'python3',
@@ -426,6 +452,15 @@ content-toolkit — AI 内容生产工具箱
       如果你只有一个视频文件想转文字，用:
       content videocut transcribe my-video.mp4
 
+分析趋势/内容判断      content analyze <模式>
+  从目录提取文字        content analyze extract ./output/douyin/user/video123/
+  单视频转录            content analyze transcribe input.mp4
+  看趋势/选题           content analyze trends
+  看 hook/结构          content analyze hooks ./output/douyin/user/video123/
+
+  ⚠️  analyze 是统一分析入口
+      content intelligence 仍可用，但现在是兼容别名
+
 改写成其他平台        content rewrite <内容目录> --from <来源> --to <目标>
   抖音→小红书           content rewrite ./output/video123/ --from douyin --to xiaohongshu
   抖音→公众号           content rewrite ./output/video123/ --from douyin --to wechat
@@ -459,7 +494,7 @@ content-toolkit — AI 内容生产工具箱
 ─────────────────────────────────────────────────────────────────
 典型工作流:
   1. 下载  content download https://douyin.com/video/xxx --cookies cookies.json
-  2. 提取  content extract ./output/douyin/user/video123/
+  2. 分析  content analyze extract ./output/douyin/user/video123/
   3. 改写  content rewrite ./output/douyin/user/video123/ --from douyin --to xiaohongshu
   4. 发布  content publish xiaohongshu upload-video --account creator --file video.mp4 --title "标题" --desc "描述"
 
@@ -502,7 +537,7 @@ function runCapability(name, args) {
     } else if (name.endsWith('.mp4') || name.endsWith('.mov') || name.endsWith('.mp3')) {
       console.error(`看起来你想处理一个视频/音频文件？试试:\n  content videocut transcribe ${name}   # 转文字\n  content videocut autocut ${name}     # 去废话\n  content videocut subtitle ${name}    # 加字幕\n`);
     } else {
-      console.error(`未知命令: "${name}"\n运行 content 查看所有可用命令。可用主能力包括 download、extract、rewrite、videocut、intelligence、publish、xiaohongshu。`);
+      console.error(`未知命令: "${name}"\n运行 content 查看所有可用命令。可用主能力包括 download、extract、analyze、rewrite、videocut、publish、xiaohongshu。`);
     }
     process.exit(1);
   }
@@ -520,6 +555,10 @@ function runCapability(name, args) {
   }
 
   if (commandPlan) {
+    if (commandPlan.routeTo) {
+      runCapability(commandPlan.routeTo, commandPlan.args);
+      return;
+    }
     try {
       execFileSync(commandPlan.executable, commandPlan.args, { cwd: commandPlan.cwd, stdio: 'inherit' });
     } catch (err) {
@@ -619,21 +658,21 @@ function main() {
   }
 
   if (command === 'install') {
-    const name = args[1];
+    const name = normalizeCapabilityName(args[1]);
     if (!name) { console.error('Usage: content install <capability>'); process.exit(1); }
     install(name);
     return;
   }
 
   if (command === 'update') {
-    const name = args[1];
+    const name = normalizeCapabilityName(args[1]);
     if (!name) { console.error('Usage: content update <capability>'); process.exit(1); }
     update(name);
     return;
   }
 
   if (command === 'remove') {
-    const name = args[1];
+    const name = normalizeCapabilityName(args[1]);
     if (!name) { console.error('Usage: content remove <capability>'); process.exit(1); }
     remove(name);
     return;

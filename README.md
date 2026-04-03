@@ -58,6 +58,11 @@ content-toolkit — AI 内容生产工具箱
 提取文字/转录         content extract <内容目录>
   从下载目录提取        content extract ./output/douyin/user/video123/
 
+分析趋势/内容判断      content analyze <模式>
+  从目录提取文字        content analyze extract ./output/douyin/user/video123/
+  单视频转录            content analyze transcribe input.mp4
+  看趋势/选题           content analyze trends
+
 改写成其他平台        content rewrite <内容目录> --from <来源> --to <目标>
   抖音→小红书           content rewrite ./output/video123/ --from douyin --to xiaohongshu
 
@@ -133,7 +138,7 @@ $ content videocut autocut ~/录制.mp4 -o /tmp/demo/ --no-review
                               │
           ┌───────┬───────┬────────┬──────────┬──────────────┬─────────────┐
           ▼       ▼       ▼        ▼          ▼              ▼
-      download  extract rewrite videocut intelligence     publish       xiaohongshu
+      download  extract analyze rewrite videocut     publish       xiaohongshu
       Python    Python  Python  Node.js   Python         Python/CLI      Python/Browser
           │       │       │        │          │              │              │
           ▼       ▼       ▼        ▼          ▼              ▼              ▼
@@ -149,7 +154,7 @@ cd content-toolkit
 
 # 2. 直接用（首次自动安装对应能力 + Python 依赖）
 node cli.js download https://douyin.com/video/xxx
-node cli.js extract ./output/douyin/user/video123/
+node cli.js analyze extract ./output/douyin/user/video123/
 node cli.js videocut autocut ~/你的视频.mp4 -o output/ --no-review
 
 # 3. 查看所有能力
@@ -160,7 +165,7 @@ node cli.js list
 
 | # | 能力 | 命令 | 说明 | 状态 |
 |---|------|------|------|------|
-| 1 | intelligence | `content intelligence` | 趋势检测 / 爆款归因 / 选题建议 | 计划中 |
+| 1 | analyze | `content analyze <模式>` | 统一分析入口，负责目录提取、单视频转录、趋势检测、爆款归因、选题建议 | 已完成 |
 | 2 | download | `content download <URL>` | 统一下载 (抖音/小红书/公众号/X) | 已完成 |
 | 3 | extract | `content extract <目录>` | 多模态提取 (转录/OCR/清洗)，面向下载后的内容目录 | 已完成 |
 | 4 | rewrite | `content rewrite <目录\|文本文件>` | 跨平台改写，支持裸 .md/.txt + 默认参数 | 已完成 |
@@ -210,7 +215,7 @@ content videocut pipeline ~/录制.mp4 --steps autocut,speed,subtitle,hook,cover
 
 ```bash
 content download https://douyin.com/video/xxx -o raw/
-content extract raw/
+content analyze extract raw/
 content rewrite raw/ --from douyin --to xiaohongshu
 ```
 
@@ -266,7 +271,7 @@ content-toolkit/
 │   ├── extract/      # → zinan92/content-extractor
 │   ├── rewrite/      # → zinan92/content-rewriter
 │   ├── videocut/     # → zinan92/videocut
-│   ├── intelligence/ # → zinan92/content-intelligence
+│   ├── analyze/      # → zinan92/content-intelligence
 │   ├── publish/      # → dreammis/social-auto-upload
 │   └── xiaohongshu/  # → autoclaw-cc/xiaohongshu-skills
 ├── SKILL.md          # 根 skill：社媒总控 router
@@ -305,7 +310,7 @@ cli_args:
   - name: capability
     type: string
     required: true
-    description: "能力名称 (download/extract/rewrite/videocut/intelligence/publish/xiaohongshu)"
+    description: "能力名称 (download/extract/analyze/rewrite/videocut/publish/xiaohongshu)"
   - name: subcommand
     type: string
     required: false
@@ -348,7 +353,7 @@ print(result.stdout)
 # 下载 + 提取 + 改写
 for cmd in [
     ["node", "cli.js", "download", "https://douyin.com/video/xxx", "-o", "raw/"],
-    ["node", "cli.js", "extract", "raw/"],
+    ["node", "cli.js", "analyze", "extract", "raw/"],
     ["node", "cli.js", "rewrite", "raw/", "--from", "douyin", "--to", "xiaohongshu"],
 ]:
     subprocess.run(cmd, cwd="/path/to/content-toolkit", check=True)

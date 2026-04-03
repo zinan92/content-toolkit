@@ -42,19 +42,19 @@ description: |
 - 原始目录提取：
 
 ```bash
-content extract <内容目录>
+content analyze extract <内容目录>
 ```
 
 - 单视频转录：
 
 ```bash
-content videocut transcribe input.mp4 -o output/
+content analyze transcribe input.mp4
 ```
 
 - 趋势与选题：
 
 ```bash
-content intelligence
+content analyze trends
 ```
 
 ### Phase 3：输出结论
@@ -77,6 +77,8 @@ content intelligence
 ## 参考资源
 
 - 分析模式与推荐命令：`references/analysis-modes.md`
+- 常见失败与补救：`references/troubleshooting.md`
+- 脚本模板：`scripts/analyze_extract.sh` `scripts/analyze_trends.sh`
 
 ## 边界
 

@@ -68,6 +68,8 @@ autocut -> speed -> subtitle -> hook -> clip -> cover
 ## 参考资源
 
 - 子命令矩阵：`references/subcommands.md`
+- 常见失败与补救：`references/troubleshooting.md`
+- 脚本模板：`scripts/videocut_pipeline.sh`
 
 ## 边界
 

@@ -69,6 +69,8 @@ content download <URL> -o raw/
 ## 参考资源
 
 - 命令契约与输入边界：`references/command-contract.md`
+- 常见失败与补救：`references/troubleshooting.md`
+- 脚本模板：`scripts/download_url.sh` `scripts/fetch_cookies.sh`
 
 ## 边界
 

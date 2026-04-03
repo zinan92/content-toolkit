@@ -71,6 +71,8 @@ content rewrite <目录或文本> --from <来源> --to <目标>
 ## 参考资源
 
 - 平台差异与输入格式：`references/platform-map.md`
+- 常见失败与补救：`references/troubleshooting.md`
+- 脚本模板：`scripts/rewrite_platform.sh`
 
 ## 边界
 

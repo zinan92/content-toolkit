@@ -12,9 +12,14 @@ test('normalizeCapabilityName maps xhs alias to xiaohongshu', () => {
   assert.equal(normalizeCapabilityName('xhs'), 'xiaohongshu');
 });
 
+test('normalizeCapabilityName maps intelligence alias to analyze', () => {
+  assert.equal(normalizeCapabilityName('intelligence'), 'analyze');
+});
+
 test('normalizeCapabilityName leaves known capability names unchanged', () => {
   assert.equal(normalizeCapabilityName('publish'), 'publish');
   assert.equal(normalizeCapabilityName('download'), 'download');
+  assert.equal(normalizeCapabilityName('analyze'), 'analyze');
 });
 
 test('getCapabilityUsageHint returns publish help when no subcommand is given', () => {
@@ -33,6 +38,13 @@ test('getCapabilityUsageHint returns download help when no URL is given', () => 
   const hint = getCapabilityUsageHint('download', []);
   assert.match(hint, /content download <URL>/);
   assert.match(hint, /fetch-cookies/);
+});
+
+test('getCapabilityUsageHint returns analyze help when no mode is given', () => {
+  const hint = getCapabilityUsageHint('analyze', []);
+  assert.match(hint, /content analyze <模式>/);
+  assert.match(hint, /extract <内容目录>/);
+  assert.match(hint, /trends/);
 });
 
 test('getCapabilityUsageHint returns rewrite help when no input is given', () => {
@@ -58,6 +70,22 @@ test('buildCommandPlan routes publish batch to the local batch-publish script', 
   assert.equal(plan.executable, 'python3');
   assert.match(plan.args[0], /scripts\/batch-publish\.py$/);
   assert.deepEqual(plan.args.slice(1), ['manifest.json', '--account', 'creator']);
+});
+
+test('buildCommandPlan routes analyze extract to the extract capability', () => {
+  const plan = buildCommandPlan('analyze', ['extract', 'raw/']);
+  assert.deepEqual(plan, {
+    routeTo: 'extract',
+    args: ['raw/'],
+  });
+});
+
+test('buildCommandPlan routes analyze transcribe to videocut transcribe', () => {
+  const plan = buildCommandPlan('analyze', ['transcribe', 'input.mp4']);
+  assert.deepEqual(plan, {
+    routeTo: 'videocut',
+    args: ['transcribe', 'input.mp4'],
+  });
 });
 
 test('validateCapabilityArgs catches missing publish account', () => {
