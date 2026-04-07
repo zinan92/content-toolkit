@@ -32,6 +32,29 @@ function capabilityPath(name) {
   return path.join(CAPS_DIR, name);
 }
 
+function expandHome(p) {
+  if (!p) return p;
+  if (p === '~') return process.env.HOME || p;
+  if (p.startsWith('~/')) {
+    return path.join(process.env.HOME || '~', p.slice(2));
+  }
+  return p;
+}
+
+function resolveLocalWorkspacePath(cap) {
+  const configured = expandHome(cap.local_dev_path);
+  if (!configured) return null;
+  if (!fs.existsSync(configured)) return null;
+  return configured;
+}
+
+function resolveExecutionPath(name) {
+  const cap = getCapability(name);
+  const localWorkspace = resolveLocalWorkspacePath(cap);
+  if (localWorkspace) return localWorkspace;
+  return capabilityPath(name);
+}
+
 function isInstalled(name) {
   return fs.existsSync(path.join(CAPS_DIR, name));
 }
@@ -78,13 +101,13 @@ function backfillMeta(name) {
 }
 
 function checkHealth(name) {
-  if (!isInstalled(name)) return HEALTH.NOT_INSTALLED;
+  const capDir = resolveExecutionPath(name);
+  if (!fs.existsSync(capDir)) return HEALTH.NOT_INSTALLED;
 
   // Backfill metadata for pre-v2 installs
   backfillMeta(name);
 
   const cap = getCapability(name);
-  const capDir = capabilityPath(name);
 
   // Reference-only capabilities (no entrypoint) — installed is the best state
   if (!cap.entrypoint) return HEALTH.INSTALLED;
@@ -183,6 +206,16 @@ function resolveSource(cap, dest) {
 
 function install(name) {
   const cap = getCapability(name);
+  const localWorkspace = resolveLocalWorkspacePath(cap);
+
+  if (localWorkspace) {
+    const missing = checkDependencies(cap.dependencies);
+    if (missing.length > 0) {
+      console.error(`  Missing dependencies for ${name}: ${missing.join(', ')}`);
+      throw new Error(`Missing dependencies: ${missing.join(', ')}`);
+    }
+    return localWorkspace;
+  }
 
   if (isInstalled(name)) {
     return capabilityPath(name);
@@ -320,6 +353,7 @@ module.exports = {
   update,
   remove,
   capabilityPath,
+  resolveExecutionPath,
   checkDependencies,
   checkHealth,
   readMeta,

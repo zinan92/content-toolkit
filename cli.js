@@ -7,7 +7,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const {
   loadRegistry, getCapability, isInstalled, install, capabilityPath,
-  update, remove, checkHealth, readMeta, HEALTH,
+  update, remove, checkHealth, readMeta, HEALTH, resolveExecutionPath,
 } = require('./install');
 
 // --- Help ---
@@ -132,6 +132,7 @@ function showHealth() {
     if (cap.trust) console.log(`  trust:   ${cap.trust}`);
     if (cap.fallback_repo) console.log(`  fallback: ${cap.fallback_repo}@${cap.fallback_ref || 'main'}`);
     console.log(`  health:  ${health}`);
+    console.log(`  exec:    ${resolveExecutionPath(cap.id)}`);
 
     if (meta) {
       console.log(`  installed_ref: ${meta.installed_ref}`);
