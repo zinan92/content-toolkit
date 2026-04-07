@@ -78,6 +78,7 @@
       "name": "Videocut",
       "kind": "first-party",
       "repo": "zinan92/videocut",
+      "local_dev_path": "~/videocut",
       "primary_ref": "main",
       "fallback_repo": null,
       "fallback_ref": null,
